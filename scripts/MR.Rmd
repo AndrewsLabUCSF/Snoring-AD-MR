@@ -23,7 +23,7 @@ library(phenoscanner)
 library(MungeSumstats)
 # library(tabulizer)
 
-setwd('~/Dropbox/Research/UCSF/Snoring-AD-MR')
+setwd('~/gitcode/Snoring-AD-MR')
 
 # Define column types for summary statistics
 coltypes = cols(
