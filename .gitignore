@@ -37,3 +37,6 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Dont read in large summary stats
+resources/*chrall.CPRA_b37.tsv.gz
