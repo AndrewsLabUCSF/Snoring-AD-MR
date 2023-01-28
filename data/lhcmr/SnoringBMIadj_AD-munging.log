@@ -1,0 +1,35 @@
+Munging 2 summary statistics files: SnoringBMIadj_AD, started at 2023-01-18 13:35:09
+     
+Interpreting the SNP column in SnoringBMIadj as the SNP column.
+Interpreting the BETA column as the effect column in SnoringBMIadj.
+Interpreting the SE column as the SE column in SnoringBMIadj.
+Calculated the standardised effect column in SnoringBMIadj.
+Interpreting the P column in SnoringBMIadj as the P-value column.
+Interpreting the A1 column as the effect allele column in SnoringBMIadj.
+Interpreting the A2 column as the alternate allele column in SnoringBMIadj.
+Interpreting the N column as the sample size column in SnoringBMIadj.
+Interpreting the CHR column as the chromosome column in SnoringBMIadj.
+Interpreting the BP column in SnoringBMIadj as the base pair/position column.
+Interpreting the SNP column in AD as the SNP column.
+Interpreting the BETA column as the effect column in AD.
+Interpreting the SE column as the SE column in AD.
+Interpreting the Z column in AD as the standardised effect column.
+Interpreting the P column in AD as the P-value column.
+Interpreting the ALT column in AD as the effect allele column.
+Interpreting the REF column in AD as the alternate allele column.
+Interpreting the N column as the sample size column in AD.
+Interpreting the CHROM column in AD as the chromosome column.
+Interpreting the POS column as the base pair/position column in AD.
+Munging LD score files, started at 2023-01-18 13:35:12
+     
+Interpreting the RS column in LDfile as the SNP column.
+Interpreting the CHR column as the chromosome column in LDfile.
+Interpreting the POS column as the base pair/position column in LDfile.
+Interpreting the LDSC column as the LD score column in LDfile.
+Interpreting the WEIGHT column as the weight column in LDfile.
+Interpreting the RSID column as the SNP column in rhofile.
+Interpreting the CHR column as the chromosome column in rhofile.
+Interpreting the POS column as the base pair/position column in rhofile.
+Interpreting the piK column as the proportion of effective SNPs in the local-LD distribution column in rhofile.
+Interpreting the sigK column as the variance of the local-LD distribution column in rhofile.
+Interpreting the m_local column as the number of SNPs used to calculate the local-LD distribution column in rhofile.

@@ -1,0 +1,23 @@
+"id.exposure","id.outcome","outcome","exposure","method","nsnp","b","se","pval"
+"HvxeqO","wjPiet","AD","Snoring","MR Egger",33,0.491288358292584,0.775190973039662,0.53088343260055
+"HvxeqO","wjPiet","AD","Snoring","Weighted median",33,0.014426022185218,0.101525577645256,0.887006949641608
+"HvxeqO","wjPiet","AD","Snoring","Inverse variance weighted",33,-0.00346532093339713,0.0888153022617107,0.968876706659404
+"HvxeqO","wjPiet","AD","Snoring","Simple mode",33,-0.0347529203525128,0.207968796909239,0.868337849939707
+"HvxeqO","wjPiet","AD","Snoring","Weighted mode",33,-0.0156204208866764,0.204852745041523,0.939693403500687
+"id.exposure","id.outcome","outcome","exposure","method","Q","Q_df","Q_pval","I2"
+"HvxeqO","wjPiet","AD","Snoring","MR Egger",52.5077382580193,31,0.0092652921267293,40.9610830166247
+"HvxeqO","wjPiet","AD","Snoring","Inverse variance weighted",53.2070468925733,32,0.0106836101228451,39.8575905469646
+"id.exposure","id.outcome","outcome","exposure","egger_intercept","se","pval"
+"HvxeqO","wjPiet","AD","Snoring",-0.0049777933440476,0.00774699411898556,0.525243370653883
+*
+"id.exposure","id.outcome","outcome","exposure","method","nsnp","b","se","pval"
+"BTidBh","OfWCCx","Snoring","AD","MR Egger",26,-0.0235871660670265,0.0116878513465996,0.0548930689440086
+"BTidBh","OfWCCx","Snoring","AD","Weighted median",26,-0.0198793240053143,0.00754101172866304,0.00838498388228604
+"BTidBh","OfWCCx","Snoring","AD","Inverse variance weighted",26,-0.0132203583060629,0.00814066499733247,0.104377949166209
+"BTidBh","OfWCCx","Snoring","AD","Simple mode",26,-0.00143795304425495,0.0262279683179165,0.956713535815641
+"BTidBh","OfWCCx","Snoring","AD","Weighted mode",26,-0.0191357382857378,0.00742428003666672,0.0162379169299836
+"id.exposure","id.outcome","outcome","exposure","method","Q","Q_df","Q_pval","I2"
+"BTidBh","OfWCCx","Snoring","AD","MR Egger",40.385314225266,24,0.0194355937808841,40.5724569428136
+"BTidBh","OfWCCx","Snoring","AD","Inverse variance weighted",42.9098068955728,25,0.0143189967094746,41.7382602983017
+"id.exposure","id.outcome","outcome","exposure","egger_intercept","se","pval"
+"BTidBh","OfWCCx","Snoring","AD",0.000707371016279173,0.000577519052639684,0.232520123563253
