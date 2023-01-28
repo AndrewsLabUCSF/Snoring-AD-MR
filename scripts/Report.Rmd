@@ -14,8 +14,27 @@ editor_options:
 library(tidyverse)
 library(flextable)
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '~/gitcode/Snoring-AD-MR')
+
 # knitr::opts_knit$set(root.dir = '~/Dropbox/Research/UCSF/Snoring-AD-MR')
 ```
+
+## Abstract
+
+**Introduction:** 
+
+
+
+**Methods:** We used bidirectional two-sample Mendelian randomization (MR) to investigate the bidirectional causal effects of Snoring and Alzheiemr's disease; and the causal effect of sleep apnea on AD. Summary statistics for genome-wide association studies of AD (n = 94,437; cases = 35,274), Snoring (n ~ 408,000; snorers ~ 152,000), and a multi-trait GWAS of sleep apnea and snoring (n = xxx). Genetic instruments were obtained by selecting independent genome-wide significant SNPs (p < 5e-8, r2 = 0.001, window = 10Mb) for each exposure and harmonizing their effects with each outcome. Fixed-effects inverse-variance weighted (IVW) meta-analysis was the primary method for estimating causal effects, with MR-Egger, Weighted mode, Weighted median, radial-MR, estimators used as sensitivity analyses. LHC-MR was further used to investigate birectional effects accounting for potential heritable confounders. Multivariable MR was used to estimate direct of AD on snoring independent from BMI. Heterogeneity was assessed using Cohcrans Q test, and pleiotropy using the MR-Egger intercept.   
+
+
+**Results:** No causal effect of snoring (OR [95%CI] = 0.84 [0.39, 1.8], p = 0.65) or sleep apnea (OR [95%CI] = 1.1 [0.83, 1.3], p = 0.67) on Alzheimer's disease was observed. In the reverse direction, no-significant effect of AD on snoring was observed using IVW (b [se] = -0.0022 [0.0014], p = 0.11) and LHC-MR (b [se] = 0.005 [0.02], p = 0.85), however, suggestive causal effects were observed in the MR-Egger (b [se] = 0.006 [0.002], p = 0.004), Weighted mode (b [se] = 0.004 [0.002], p = 0.03), and Weighted Median (b [se] = 0.004 [0.002], p = 0.01) sensetivity analyses. There was no evidence of heterogenity, but evidence of pleiotropic effects (MR-Egger Intercept: b [se] = 0.001 [0.0003], p = 0.009). Multivariable MR indicated that the effect of AD on snoring was likely driven by BMI. 
+
+
+**Conclusion:**
+
+
+
 
 ## Datasets
 
@@ -29,6 +48,11 @@ Exposure: Sleep Apnea + Snoring
 
 * Campos, A. I. et al. Sleep (2022).
 * genome-wide association study (GWAS) meta-analysis of sleep apnoea across five cohorts (NTotal=523,366), followed by a multi-trait analysis of GWAS (MTAG) to boost power, leveraging the high genetic correlation between sleep apnoea and snoring. Replicated top findings in 23andMe. 49 Signficant loci, with twenty nine replicated in 23andMe
+
+Exposure: BMI
+
+* Lock et al Nature 2015
+*  To understand the genetic basis of obesity better, here we conduct a genome-wide association study and Metabochip meta-analysis of body mass index (BMI), a measure commonly used to define obesity and assess adiposity, in up to 339,224 individuals. This analysis identifies 97 BMI-associated loci, 56 of which are novel.  
 
 Outcome: Alzheimer's disease 
 
@@ -56,56 +80,89 @@ TwoSampleMR (Foward)
   * Radial MR
   
 TwoSampleMR (Reverse)
+
 * Primary analysis: Fixed effect Inverse Weighted Analysis
 * Sensitivity analysis: Weighted median, Weighted mode, MR-Egger 
 * Heterogeneity and Pleiotropy: 
   * MR-Egger Intercept 
   * Cochrans Q test
   * Radial MR
- 
+
+
+LHC-MR
+
+
+Multivariable MR 
+
+
+
   
 ## Results (Foward)
 
 No significant effect of snoring or sleep apnea on AD.  
 ```{r df, eval=T, echo=F, message=F}
-res <- read_csv('../results/sleep_ad_mr_results.csv')
+res <- read_csv('results/sleep_ad_mr_results.csv')
 res %>% 
   TwoSampleMR::generate_odds_ratios() %>%
   select(method, exposure, nsnp, or, or_lci95, or_uci95, pval) %>%
   mutate_at(c("or", 'or_lci95', 'or_uci95', 'pval'), signif, digits = 2) %>%
   unite(ci, c('or_lci95', 'or_uci95'), sep = ", ") %>%
-  flextable() 
+  relocate(exposure) %>%
+  flextable()  %>% 
+  autofit() %>%
+  merge_v(., j = ~ exposure) %>% 
+  fix_border_issues() %>%
+  theme_box()
 ```
 
 ```{r, echo=FALSE, fig.cap="Figure 1: Scatter Plot showing MR causal estimates"}
-knitr::include_graphics("../results/plots/mr_scatter_snoring.png")
-knitr::include_graphics("../results/plots/mr_scatter_SAsnoring.png")
+knitr::include_graphics("results/plots/mr_scatter_snoring.png")
+knitr::include_graphics("results/plots/mr_scatter_SAsnoring.png")
 ```
 
 
 No significant heterogenity 
 
 ```{r het, eval=T, echo=F, message=F}
-het_res <- read_csv('../results/sleep_ad_het_results.csv')
+het_res <- read_csv('results/sleep_ad_het_results.csv')
 het_res %>% 
-  select(exposure, method, Q, Q_df, Q_pval) %>%
-  flextable() 
+  select(exposure, outcome, method, Q, Q_df, Q_pval) %>%
+  mutate(Q_pval = case_when(
+      Q_pval > 0.001 ~ as.character(signif(Q_pval, digits = 2)), 
+      TRUE ~ '< 0.001'
+    )) %>%
+  flextable() %>% 
+  autofit() %>%
+  merge_v(., j = ~ exposure) %>% 
+  fix_border_issues() %>%
+  theme_box()
 ```
 
 No significant pleiotropy 
 
 ```{r het_plieo, eval=T, echo=F, message=F}
-het_plieo <- read_csv('../results/sleep_ad_plei_results.csv')
+het_plieo <- read_csv('results/sleep_ad_plei_results.csv')
 het_plieo %>% 
-  select(exposure, egger_intercept, se, pval) %>%
-  flextable() 
+  select(exposure, outcome, egger_intercept, se, pval) %>%
+  mutate_at(c("se", 'egger_intercept'), signif, digits = 2) %>%
+  mutate(
+    pval = case_when(
+      pval > 0.001 ~ as.character(signif(pval, digits = 2)), 
+      TRUE ~ '< 0.001'
+    ), 
+  ) %>%
+  flextable() %>% 
+  autofit() %>%
+  merge_v(., j = ~ exposure) %>% 
+  fix_border_issues() %>%
+  theme_box()
 ```
 
 
 
 ```{r, echo=FALSE, fig.cap="Figure 2: Funnel Plot showing heterogeneity"}
-knitr::include_graphics("../results/plots/mr_funnel_snoring.png")
-knitr::include_graphics("../results/plots/mr_funnel_SAsnoring.png")
+knitr::include_graphics("results/plots/mr_funnel_snoring.png")
+knitr::include_graphics("results/plots/mr_funnel_SAsnoring.png")
 ```
 
 
@@ -113,26 +170,173 @@ no significant outliers from LOO or Radial MR
 
 
 ```{r, echo=FALSE, fig.cap="Figure 3: Leave-one-out Plot showing effect of individual SNPs on causal etimate"}
-knitr::include_graphics("../results/plots/mr_loo_snoring.png")
-knitr::include_graphics("../results/plots/mr_loo_SAsnoring.png")
+knitr::include_graphics("results/plots/mr_loo_snoring.png")
+knitr::include_graphics("results/plots/mr_loo_SAsnoring.png")
 ```
 
 
 ```{r, echo=FALSE, fig.cap="Figure 4: Radial Plot showing potential outliers"}
-knitr::include_graphics("../results/plots/mr_radial_snoring.png")
-knitr::include_graphics("../results/plots/mr_radial_SAsnoring.png")
+knitr::include_graphics("results/plots/mr_radial_snoring.png")
+knitr::include_graphics("results/plots/mr_radial_SAsnoring.png")
 ```
 
 
 ## Results (Reverse)
 
+### Causal estimates
+```{r res_rev, eval=T, echo=F, message=F}
+res_rev <- read_csv('results/ad_bmi_sleep_mr_results.csv')
+res_rev %>% 
+  select(method, exposure, outcome, nsnp, b, se, pval) %>%
+  mutate_at(c("b", 'se'), signif, digits = 2) %>%
+  mutate(
+    pval = case_when(
+      pval > 0.001 ~ as.character(signif(pval, digits = 2)), 
+      TRUE ~ '< 0.001'
+    ), 
+    method = str_replace_all(method, "Inverse variance weighted \\(fixed effects\\)", "IVW")
+  ) %>%
+  relocate(exposure, outcome) %>%
+  flextable()  %>% 
+  autofit() %>%
+  merge_v(., j = ~ exposure + outcome) %>% 
+  fix_border_issues() %>%
+  theme_box()
+```
 
 
 
+```{r scatter_rev, echo=FALSE, fig.cap="Figure x: Scatter Plot showing causal estimates of AD/BMI onto Snoring"}
+knitr::include_graphics("results/plots/mr_scatter_ad_bmi_snoring.png")
+```
+
+### Heterogenity 
+```{r het_rev, eval=T, echo=F, message=F}
+het_res_rev <- read_csv('results/ad_bmi_sleep_het_results.csv')
+het_res_rev %>% 
+  select(exposure, outcome, method, Q, Q_df, Q_pval) %>%
+  mutate(Q_pval = case_when(
+      Q_pval > 0.001 ~ as.character(signif(Q_pval, digits = 2)), 
+      TRUE ~ '< 0.001'
+    )) %>%
+  flextable() %>% 
+  autofit() %>%
+  merge_v(., j = ~ exposure + outcome) %>% 
+  fix_border_issues() %>%
+  theme_box()
+```
+
+### Pleiotropy 
+```{r plieo_rev, eval=T, echo=F, message=F}
+het_plieo_rev <- read_csv('results/ad_bmi_sleep_plei_results.csv')
+het_plieo_rev %>% 
+  select(exposure, outcome, egger_intercept, se, pval) %>%
+  mutate_at(c("se", 'egger_intercept'), signif, digits = 2) %>%
+  mutate(
+    pval = case_when(
+      pval > 0.001 ~ as.character(signif(pval, digits = 2)), 
+      TRUE ~ '< 0.001'
+    ), 
+  ) %>%
+  flextable() %>% 
+  autofit() %>%
+  merge_v(., j = ~ exposure + outcome) %>% 
+  fix_border_issues() %>%
+  theme_box()
+```
 
 
 
+```{r funnel_rev, echo=FALSE, fig.cap="Figure x: Funnel Plot showing heterogeneity of AD/BMI onto Snoring"}
+knitr::include_graphics("results/plots/mr_funnel_ad_bmi_snoring.png")
 
+```
+
+
+
+```{r radial_rev, echo=FALSE, fig.cap="Figure 2: Funnel Plot showing outliers in AD/BMI onto Snoring"}
+knitr::include_graphics('results/plots/mr_radial_ad_bmi_snoring.png')
+
+```
+
+
+## LHC-MR
+
+Parameters
+
+* pi(x|y): polygenicity
+* h2(x|y): heritability
+* t(x|y): confounding effect 
+* axy: causal effect of exposure on outcome (fwd)
+* ayx: causal effect of outcome on exposure (rev)
+* iXY: cross-trait intercept (LDSC)
+
+
+```{r lhcmr, echo=F, message=F}
+# snorbmi_lhcmr_res <- read_csv('../results/snorbmi_lhcmr.csv')
+snor_lhcmr_res <- read_csv('data/lhcmr/SummarisedResults_Snoring-AD.csv')
+
+snor_lhcmr_res %>%
+  rename(parameters = '...1') %>%
+  mutate_if(is.numeric, signif, digits = 2) %>%
+  mutate(
+    h2X = case_when(
+      h2X > 0.0001 ~ as.character(signif(h2X, digits = 2)),
+      TRUE ~ '< 0.001'
+    ),
+  ) %>%
+  flextable() %>% 
+  autofit() %>%
+  fix_border_issues() %>%
+  theme_box() 
+
+```
+
+## Multivariable MR 
+
+```{r mvmr, echo=F, message=F}
+mvmr_res <- read_csv('results/bmi_ad_snoring_mvmr_results.csv')
+
+mvmr_res %>% 
+  select(exposure, outcome, nsnp, b, se, pval) %>%
+  mutate_at(c("b", 'se'), signif, digits = 2) %>%
+  mutate(
+    pval = case_when(
+      pval > 0.001 ~ as.character(signif(pval, digits = 2)), 
+      TRUE ~ '< 0.001'
+    ), 
+  ) %>%
+  flextable() %>% 
+  autofit() %>%
+  fix_border_issues() %>%
+  theme_box()
+
+```
+
+
+```{r rmvmr_fig, echo=FALSE, fig.cap="Figure x: RMVMR results for AD (exp1) and BMI (exp2) on Snoring"}
+knitr::include_graphics("results/plots/rmvmr_bmi_ad_snoring.png")
+```
+
+```{r, echo=F, message=F}
+mvmr_sens_res <- read_csv('results/bmi_ad_snoring_mvmr_sensetivity_results.csv')
+
+mvmr_sens_res %>% 
+  mutate_at(c("b", 'se'), signif, digits = 2) %>%
+  mutate(
+    p = case_when(
+      p > 0.001 ~ as.character(signif(p, digits = 2)), 
+      TRUE ~ '< 0.001'
+    ), 
+  ) %>%
+  flextable() %>% 
+  autofit() %>%
+  merge_v(., j = ~ Exposure) %>% 
+  fix_border_issues() %>%
+  theme_box()
+
+
+```
 
 
 
