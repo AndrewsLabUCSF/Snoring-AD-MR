@@ -1,0 +1,44 @@
+Multivariate ld-score regression of 2 traits (Snoring.sumstats.gz AD.sumstats.gz) began at: 2023-01-18 10:16:25
+Reading in LD scores
+Read in summary statistics [1/2] from: Snoring.sumstats.gz
+Out of 81726 SNPs, 81347 remain after merging with LD-score files
+Removing 0 SNPs with Chi^2 > 408; 81347 remain
+Read in summary statistics [2/2] from: AD.sumstats.gz
+Out of 81726 SNPs, 81347 remain after merging with LD-score files
+Removing 3 SNPs with Chi^2 > 82.771; 81344 remain
+          
+Estimating heritability [1/3] for: Snoring.sumstats.gz
+Heritability Results for trait: Snoring.sumstats.gz
+Mean Chi^2 across remaining SNPs: 1.5696
+Lambda GC: 1.4295
+Intercept: 1.0174 (0.0214)
+Ratio: 0.0306 (0.0376)
+Total Observed Scale h2: 0.0628 (0.0039)
+h2 Z: 16.2
+     
+Calculating genetic covariance [2/3] for traits: Snoring.sumstats.gz and AD.sumstats.gz
+81344 SNPs remain after merging Snoring.sumstats.gz and AD.sumstats.gz summary statistics
+Results for genetic covariance between: Snoring.sumstats.gz and AD.sumstats.gz
+Mean Z*Z: 0.0077
+Cross trait Intercept: 0.0067 (0.0133)
+Total Observed Scale Genetic Covariance (g_cov): -1e-04 (0.005)
+g_cov Z: -0.0176
+g_cov P-value: 0.98596
+          
+Estimating heritability [3/3] for: AD.sumstats.gz
+Heritability Results for trait: AD.sumstats.gz
+Mean Chi^2 across remaining SNPs: 1.1339
+Lambda GC: 1.1083
+Intercept: 1.0317 (0.0228)
+Ratio: 0.2367 (0.1699)
+Total Observed Scale h2: 0.0699 (0.0172)
+h2 Z: 4.07
+     
+      
+Genetic Correlation Results
+Genetic Correlation between Snoring.sumstats.gz and AD.sumstats.gz: -0.0013 (0.076)
+     
+     
+LDSC finished running at 2023-01-18 10:16:29
+Running LDSC for all files took 0 minutes and 4 seconds
+     

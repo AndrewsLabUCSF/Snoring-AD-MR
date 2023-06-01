@@ -1,0 +1,23 @@
+"id.exposure","id.outcome","outcome","exposure","method","nsnp","b","se","pval"
+"XJH0D7","7XSz8T","AD","SnoringBMIadj","MR Egger",26,0.500410643687817,0.607233961272236,0.418007716815203
+"XJH0D7","7XSz8T","AD","SnoringBMIadj","Weighted median",26,0.132640633911083,0.111146645456477,0.232718998663817
+"XJH0D7","7XSz8T","AD","SnoringBMIadj","Inverse variance weighted",26,0.0355887410881838,0.0785264772908657,0.650399766698489
+"XJH0D7","7XSz8T","AD","SnoringBMIadj","Simple mode",26,0.190322893912626,0.22598465792138,0.407664378163
+"XJH0D7","7XSz8T","AD","SnoringBMIadj","Weighted mode",26,0.243885719372747,0.211617284552248,0.260023377531084
+"id.exposure","id.outcome","outcome","exposure","method","Q","Q_df","Q_pval","I2"
+"XJH0D7","7XSz8T","AD","SnoringBMIadj","MR Egger",24.786565166915,24,0.417432386042245,3.17335282891455
+"XJH0D7","7XSz8T","AD","SnoringBMIadj","Inverse variance weighted",25.4021837266236,25,0.440024903209668,1.58326437975516
+"id.exposure","id.outcome","outcome","exposure","egger_intercept","se","pval"
+"XJH0D7","7XSz8T","AD","SnoringBMIadj",-0.00466693502117371,0.00604475154630121,0.447612869038244
+*
+"id.exposure","id.outcome","outcome","exposure","method","nsnp","b","se","pval"
+"ADW40M","fmvojb","SnoringBMIadj","AD","MR Egger",26,-0.0144472119898529,0.0128578860779484,0.272293658734324
+"ADW40M","fmvojb","SnoringBMIadj","AD","Weighted median",26,-0.0110933354877511,0.00766732133616785,0.147943630336547
+"ADW40M","fmvojb","SnoringBMIadj","AD","Inverse variance weighted",26,-0.0057292192769068,0.0088454251576969,0.51717626884111
+"ADW40M","fmvojb","SnoringBMIadj","AD","Simple mode",26,-0.0144513267729841,0.0255787829672027,0.577127163331243
+"ADW40M","fmvojb","SnoringBMIadj","AD","Weighted mode",26,-0.0114513390472114,0.00751409289367437,0.140064576132875
+"id.exposure","id.outcome","outcome","exposure","method","Q","Q_df","Q_pval","I2"
+"ADW40M","fmvojb","SnoringBMIadj","AD","MR Egger",48.7638360384641,24,0.00202784238497587,50.7831992932853
+"ADW40M","fmvojb","SnoringBMIadj","AD","Inverse variance weighted",50.545072738568,25,0.0018246110611602,50.5391947315886
+"id.exposure","id.outcome","outcome","exposure","egger_intercept","se","pval"
+"ADW40M","fmvojb","SnoringBMIadj","AD",0.000594865371156189,0.000635332659711579,0.35844274923223

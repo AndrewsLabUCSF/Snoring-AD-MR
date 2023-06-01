@@ -9,7 +9,11 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd('~/Dropbox/Research/UCSF/Snoring-AD-MR/')
+knitr::opts_knit$set(root.dir = '~/gitcode/Snoring-AD-MR')
+```
+
+```{r packages}
+date = Sys.Date()
 
 library(tidyverse)
 library(lhcMR)
@@ -45,25 +49,25 @@ coltypes = cols(
 ## Step 1: Reading in and merging Data
 ```{r ld}
 ## File paths needed for the analysis
-LD.filepath = "~/Dropbox/Research/Data/ReferencePopulations/lhcMR/LDscores_filtered.csv" # LD scores
-rho.filepath = "~/Dropbox/Research/Data/ReferencePopulations/lhcMR/LD_GM2_2prm.csv" # local/SNP-specfic LD scores
+LD.filepath = "resources/lhcMR/LDscores_filtered.csv" # LD scores
+rho.filepath = "resources/lhcMR/LD_GM2_2prm.csv" # local/SNP-specfic LD scores
 
-ld = "~/Dropbox/Research/Data/ReferencePopulations/GenomicSEM/eur_w_ld_chr/"
-hm3 = "~/Dropbox/Research/Data/ReferencePopulations/GenomicSEM/w_hm3.snplist"
+ld = "resources/GenomicSEM/eur_w_ld_chr/"
+hm3 = "resources/GenomicSEM/w_hm3.snplist"
 
 ```
 
 ```{r read_exposure}
 # Snoring
-exposure_path = "~/Dropbox/Research/Data/Summary_Statisitics/Campos2020snor.chrall.CPRA_b37.tsv.gz"
+exposure_path = "resources/Campos2020snor.chrall.CPRA_b37.tsv.gz"
 snoring_ss <- read_tsv(exposure_path, comment = "##",  col_types = coltypes, 
                         col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))  %>%
   rename(SNP = DBSNP_ID) %>%
-  mutate(N = 408000)
+  mutate(N = 408317)
 
 # Snoring bmi adjusted 
 
-snorbmi_path = "~/Dropbox/Research/Data/Summary_Statisitics/Campos2020snorbmiadj.chrall.CPRA_b37.tsv.gz"
+snorbmi_path = "resources/Campos2020snorbmiadj.chrall.CPRA_b37.tsv.gz"
 
 snorbmiadj_ss <- read_tsv(snorbmi_path, comment = "##",  col_types = coltypes, 
                         col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))  %>%
@@ -75,7 +79,7 @@ snorbmiadj_ss <- read_tsv(snorbmi_path, comment = "##",  col_types = coltypes,
 
 
 ```{r read_outcome}
-outcome_path = "~/Dropbox/Research/Data/Summary_Statisitics/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
+outcome_path = "resources/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
 AD_ss <- read_tsv(outcome_path, comment = "##",  col_types = coltypes, 
                         col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))  %>%
   # filter(!(chr.outcome == 19 & between(pos.outcome, 44912079, 45912079)))
@@ -119,7 +123,7 @@ snorbmi_SP_list = calculate_SP(snorbmi_df,snorbmiadj.names,run_ldsc=TRUE,run_MR=
 
 ## Step 3
 snoring_res = lhc_mr(snoring_SP_list, snoring.names, paral_method="lapply", nCores = 2, nBlock=200)
-snoring_res %>% as_tibble() %>% write_csv(., "results/snoring_lhcmr.csv")
+snoring_res %>% as_tibble() %>% write_csv(., glue("results/snoring_lhcmr-{date}.csv"))
 
 ## Step 3
 snorbmi_res = lhc_mr(snorbmi_SP_list, snorbmiadj.names, paral_method="lapply", nCores = 2, nBlock=200)

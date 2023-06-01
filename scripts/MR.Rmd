@@ -9,7 +9,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd('~/Dropbox/Research/UCSF/Snoring-AD-MR/')
+knitr::opts_knit$set(root.dir = '~/gitcode/Snoring-AD-MR')
 ```
 
 ## Mendelian Randomization
@@ -22,8 +22,6 @@ library(RadialMR)     # Radial MR sensetivity analysis
 library(phenoscanner)
 library(MungeSumstats)
 # library(tabulizer)
-
-setwd('~/gitcode/Snoring-AD-MR')
 
 # Define column types for summary statistics
 coltypes = cols(
@@ -53,154 +51,6 @@ coltypes = cols(
 
 ```
 
-### Exposure dataset
-```{r sa_snoring}
-## read in and format SA & Snoring GWAS summary stats
-## No need to do LD clumping, already done by GWAS
-sa_snoring_path = 'data/sasnoring_res.csv'
-sa_snoring_ss <- read_csv(sa_snoring_path)
-
-sa_snoring_dat <- sa_snoring_ss %>%
-  mutate(Phenotype = "SAsnoring") %>%
-  format_data(.,
-    type = "exposure",
-    snps = NULL,
-    header = TRUE,
-    phenotype_col = "Phenotype",
-    snp_col = "SNP",
-    beta_col = "BETA",
-    se_col = "SE",
-    # eaf_col = "AF",
-    effect_allele_col = "A1",
-    other_allele_col = "A2",
-    pval_col = "P_META",
-    chr_col = "CHR",
-    pos_col = "BP",
-    log_pval = FALSE
-) %>%
-  as_tibble()
-
-```
-
-```{r snoring}
-snoring_path = "~/Dropbox/Research/Data/Summary_Statisitics/Campos2020snor.chrall.CPRA_b37.tsv.gz"
-snoring_ss <- read_tsv(snoring_path, comment = "##",  col_types = coltypes, 
-                       col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
-
-
-# Format data to TwoSampleMR format
-snoring_exp <- snoring_ss %>%
-  mutate(Phenotype = "Snoring") %>%
-  format_data(.,
-    type = "exposure",
-    snps = NULL,
-    header = TRUE,
-    phenotype_col = "Phenotype",
-    snp_col = "DBSNP_ID",
-    beta_col = "BETA",
-    se_col = "SE",
-    eaf_col = "AF",
-    effect_allele_col = "ALT",
-    other_allele_col = "REF",
-    pval_col = "P",
-    chr_col = "CHROM",
-    pos_col = "POS",
-    log_pval = FALSE
-) %>%
-  as_tibble()
-
-# Perform LD clumping on SNP data, filter SNPs to make it run faster
-snoring_clump <- snoring_exp %>% 
-  filter(pval.exposure < 0.01) %>%
-  clump_data(.,
-  clump_kb = 10000,
-  clump_r2 = 0.001,
-  clump_p1 = 1,
-  clump_p2 = 1,
-  pop = "EUR"
-)
-
-snoring_dat <- filter(snoring_clump, pval.exposure < 5e-8) 
-```
-
-```{r snoring_bmi_adj}
-snorbmiadj_path <- "~/Dropbox/Research/Data/Summary_Statisitics/Campos2020snorbmiadj.chrall.CPRA_b37.tsv.gz"
-
-snorbmiadj_ss <- read_tsv(snorbmiadj_path, comment = "##",  col_types = coltypes, 
-                       col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
-
-
-# Format data to TwoSampleMR format
-snorbmiadj_exp <- snorbmiadj_ss %>%
-  mutate(Phenotype = "SnoringBMIadj") %>%
-  format_data(.,
-    type = "exposure",
-    snps = NULL,
-    header = TRUE,
-    phenotype_col = "Phenotype",
-    snp_col = "DBSNP_ID",
-    beta_col = "BETA",
-    se_col = "SE",
-    eaf_col = "AF",
-    effect_allele_col = "ALT",
-    other_allele_col = "REF",
-    pval_col = "P",
-    chr_col = "CHROM",
-    pos_col = "POS",
-    log_pval = FALSE
-) %>%
-  as_tibble()
-
-# Perform LD clumping on SNP data, filter SNPs to make it run faster
-snorbmiadj_clump <- snorbmiadj_exp %>% 
-  filter(pval.exposure < 0.01) %>%
-  clump_data(.,
-  clump_kb = 10000,
-  clump_r2 = 0.001,
-  clump_p1 = 1,
-  clump_p2 = 1,
-  pop = "EUR"
-)
-
-snorbmiadj_dat <- filter(snorbmiadj_clump, pval.exposure < 5e-8) 
-
-```
-
-
-## Outcome datasets
-Similary, the outcome dataset needs to be converted to the TwoSampleMR format and the exposures SNPs or their LD proxies will be extracted.
-```{r outcome}
-AD_path = "~/Dropbox/Research/Data/Summary_Statisitics/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
-AD_ss <- read_tsv(AD_path, comment = "##",  col_types = coltypes, 
-                       col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
-
-# Format outcome
-AD_out <- AD_ss %>%
-  mutate(Phenotype = "AD") %>%
-  format_data(.,
-    type = "outcome",
-    snps = NULL,
-    header = TRUE,
-    phenotype_col = "Phenotype",
-    snp_col = "DBSNP_ID",
-    beta_col = "BETA",
-    se_col = "SE",
-    eaf_col = "AF",
-    effect_allele_col = "ALT",
-    other_allele_col = "REF",
-    pval_col = "P",
-    samplesize_col = "N",
-    z_col = "Z",
-    chr_col = "CHROM",
-    pos_col = "POS",
-    log_pval = FALSE
-) %>%
-  as_tibble()
-
-```
-
-
-### LD Proxy SNPs 
 ```{r get_proxies}
 munge_proxies <- function(LDLink_file, outcome, outcome_clump){
   LDLink_file_path <- LDLink_file
@@ -264,6 +114,154 @@ outcome_dat
 
 ```
 
+### Exposure dataset
+```{r sa_snoring}
+## read in and format SA & Snoring GWAS summary stats
+## No need to do LD clumping, already done by GWAS
+sa_snoring_path = 'resources/sasnoring_res.csv'
+sa_snoring_ss <- read_csv(sa_snoring_path)
+
+sa_snoring_dat <- sa_snoring_ss %>%
+  mutate(Phenotype = "SAsnoring") %>%
+  format_data(.,
+    type = "exposure",
+    snps = NULL,
+    header = TRUE,
+    phenotype_col = "Phenotype",
+    snp_col = "SNP",
+    beta_col = "BETA",
+    se_col = "SE",
+    # eaf_col = "AF",
+    effect_allele_col = "A1",
+    other_allele_col = "A2",
+    pval_col = "P_META",
+    chr_col = "CHR",
+    pos_col = "BP",
+    log_pval = FALSE
+) %>%
+  as_tibble()
+
+```
+
+```{r snoring}
+snoring_path = "resources/Campos2020snor.chrall.CPRA_b37.tsv.gz"
+snoring_ss <- read_tsv(snoring_path, comment = "##",  col_types = coltypes, 
+                       col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
+
+
+# Format data to TwoSampleMR format
+snoring_exp <- snoring_ss %>%
+  mutate(Phenotype = "Snoring") %>%
+  format_data(.,
+    type = "exposure",
+    snps = NULL,
+    header = TRUE,
+    phenotype_col = "Phenotype",
+    snp_col = "DBSNP_ID",
+    beta_col = "BETA",
+    se_col = "SE",
+    eaf_col = "AF",
+    effect_allele_col = "ALT",
+    other_allele_col = "REF",
+    pval_col = "P",
+    chr_col = "CHROM",
+    pos_col = "POS",
+    log_pval = FALSE
+) %>%
+  as_tibble()
+
+# Perform LD clumping on SNP data, filter SNPs to make it run faster
+snoring_clump <- snoring_exp %>% 
+  filter(pval.exposure < 0.01) %>%
+  clump_data(.,
+  clump_kb = 10000,
+  clump_r2 = 0.001,
+  clump_p1 = 1,
+  clump_p2 = 1,
+  pop = "EUR"
+)
+
+snoring_dat <- filter(snoring_clump, pval.exposure < 5e-8) 
+```
+
+```{r snoring_bmi_adj}
+snorbmiadj_path <- "resources/Campos2020snorbmiadj.chrall.CPRA_b37.tsv.gz"
+
+snorbmiadj_ss <- read_tsv(snorbmiadj_path, comment = "##",  col_types = coltypes, 
+                       col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
+
+
+# Format data to TwoSampleMR format
+snorbmiadj_exp <- snorbmiadj_ss %>%
+  mutate(Phenotype = "SnoringBMIadj") %>%
+  format_data(.,
+    type = "exposure",
+    snps = NULL,
+    header = TRUE,
+    phenotype_col = "Phenotype",
+    snp_col = "DBSNP_ID",
+    beta_col = "BETA",
+    se_col = "SE",
+    eaf_col = "AF",
+    effect_allele_col = "ALT",
+    other_allele_col = "REF",
+    pval_col = "P",
+    chr_col = "CHROM",
+    pos_col = "POS",
+    log_pval = FALSE
+) %>%
+  as_tibble()
+
+# Perform LD clumping on SNP data, filter SNPs to make it run faster
+snorbmiadj_clump <- snorbmiadj_exp %>% 
+  filter(pval.exposure < 0.01) %>%
+  clump_data(.,
+  clump_kb = 10000,
+  clump_r2 = 0.001,
+  clump_p1 = 1,
+  clump_p2 = 1,
+  pop = "EUR"
+)
+
+snorbmiadj_dat <- filter(snorbmiadj_clump, pval.exposure < 5e-8) 
+
+```
+
+
+## Outcome datasets
+Similary, the outcome dataset needs to be converted to the TwoSampleMR format and the exposures SNPs or their LD proxies will be extracted.
+```{r outcome}
+AD_path = "resources/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
+AD_ss <- read_tsv(AD_path, comment = "##",  col_types = coltypes, 
+                       col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
+
+# Format outcome
+AD_out <- AD_ss %>%
+  mutate(Phenotype = "AD") %>%
+  format_data(.,
+    type = "outcome",
+    snps = NULL,
+    header = TRUE,
+    phenotype_col = "Phenotype",
+    snp_col = "DBSNP_ID",
+    beta_col = "BETA",
+    se_col = "SE",
+    eaf_col = "AF",
+    effect_allele_col = "ALT",
+    other_allele_col = "REF",
+    pval_col = "P",
+    samplesize_col = "N",
+    z_col = "Z",
+    chr_col = "CHROM",
+    pos_col = "POS",
+    log_pval = FALSE
+) %>%
+  as_tibble()
+
+```
+
+
+### LD Proxy SNPs
 ```{r AD_snoring_proxy}
 # extract exposure SNPs present in outcome
 AD_snoring_clump <- semi_join(

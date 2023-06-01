@@ -6,6 +6,11 @@ editor_options:
   chunk_output_type: console
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '~/gitcode/Snoring-AD-MR')
+```
+
 ```{r packages}
 library(tidyverse)    # Data wrangling 
 library(TwoSampleMR)  # MR 
@@ -13,9 +18,10 @@ library(LDlinkR)      # LD and proxy snps
 library(RadialMR)     # Radial MR sensetivity analysis 
 library(phenoscanner)
 library(MungeSumstats)
+library(cowplot)
+# library(MVMRmode)
 # library(tabulizer)
-
-setwd('~/Dropbox/Research/UCSF/Snoring-AD-MR')
+`%nin%` = negate(`%in%`)
 
 # Define column types for summary statistics
 coltypes = cols(
@@ -45,9 +51,72 @@ coltypes = cols(
 
 ```
 
+```{r get_proxies}
+munge_proxies <- function(LDLink_file, outcome, outcome_clump){
+  LDLink_file_path <- LDLink_file
+  proxy_snps <- read_tsv(LDLink_file_path, skip = 1, col_names = F) %>%
+    rename(id = X1, func = X2, proxy_snp = X3, coord = X4, alleles = X5, maf = X6, 
+           distance = X7, dprime = X8, rsq = X9, correlated_alleles = X10, FORGEdb = X11, RegulomeDB = X12) %>%
+    separate(coord, c('chr', 'pos'), sep = ":") %>%
+    mutate(snp = ifelse(id == 1, proxy_snp, NA), 
+           chr = str_replace(chr, 'chr', ""), 
+           chr = as.numeric(chr), 
+           pos = as.numeric(pos)) %>%
+    fill(snp, .direction = 'down') %>%
+    relocate(snp, .before = proxy_snp) %>%
+    dplyr::select(-id, -func, -FORGEdb, -RegulomeDB) %>%
+    filter(rsq >= 0.8)
+
+# Munge proxy snp and outcome data
+proxy_outcome <- left_join(
+    proxy_snps, outcome, by = c("proxy_snp" = "SNP")
+  ) %>%
+    separate(correlated_alleles, c("target_a1.outcome", "proxy_a1.outcome", 
+                                   "target_a2.outcome", "proxy_a2.outcome"), sep = ",|=") %>%
+    filter(!is.na(chr.outcome)) %>%
+    arrange(snp, -rsq, abs(distance)) %>%
+    group_by(snp) %>%
+    slice(1) %>%
+    ungroup() %>%
+    mutate(
+       proxy.outcome = TRUE,
+       target_snp.outcome = snp,
+       proxy_snp.outcome = proxy_snp, 
+    ) %>% 
+    mutate(
+         new_effect_allele.outcome = case_when(
+          proxy_a1.outcome == effect_allele.outcome & proxy_a2.outcome == other_allele.outcome ~ target_a1.outcome,
+          proxy_a2.outcome == effect_allele.outcome & proxy_a1.outcome == other_allele.outcome ~ target_a2.outcome,
+          TRUE ~ NA_character_
+       ), 
+        new_other_allele.outcome = case_when(
+          proxy_a1.outcome == effect_allele.outcome & proxy_a2.outcome == other_allele.outcome ~ target_a2.outcome,
+          proxy_a2.outcome == effect_allele.outcome & proxy_a1.outcome == other_allele.outcome ~ target_a1.outcome,
+          TRUE ~ NA_character_
+       ), 
+       effect_allele.outcome = new_effect_allele.outcome, 
+       other_allele.outcome = new_other_allele.outcome
+    ) %>%
+    dplyr::select(-proxy_snp, -chr, -pos, -alleles, -maf, -distance, -rsq, -dprime,  
+           -new_effect_allele.outcome, -new_other_allele.outcome) %>%
+    relocate(target_a1.outcome, proxy_a1.outcome, target_a2.outcome, proxy_a2.outcome, .after = proxy_snp.outcome) %>%
+    rename(SNP = snp) %>%
+    relocate(SNP, .after = samplesize.outcome)
+
+# Merge outcome and proxy outcomes
+outcome_dat <- bind_rows(
+  outcome_clump, proxy_outcome
+) %>% 
+  arrange(chr.outcome, pos.outcome)
+
+outcome_dat
+}
+
+```
+
 ## Exposures
 ```{r exposure-AD}
-AD_path = "~/Dropbox/Research/Data/Summary_Statisitics/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
+AD_path = "resources/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
 AD_ss <- read_tsv(AD_path, comment = "##",  col_types = coltypes, 
                        col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
 
@@ -93,7 +162,7 @@ AD_dat <- filter(AD_clump, pval.exposure < 5e-8)
 
 
 ```{r bmi}
-bmi_path <- "~/Dropbox/Research/Data/Summary_Statisitics/Locke2015bmi.chrall.CPRA_b37.tsv.gz"
+bmi_path <- "resources/Locke2015bmi.chrall.CPRA_b37.tsv.gz"
 
 bmi_ss <- read_tsv(bmi_path, comment = "##",  col_types = coltypes, 
                        col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
@@ -133,12 +202,35 @@ BMI_clump <- bmi_exp %>%
 BMI_dat <- filter(BMI_clump, pval.exposure < 5e-8) 
 
 
+## BMI Outcome 
+bmi_out <- bmi_ss %>%
+  mutate(Phenotype = "BMI") %>%
+  format_data(.,
+    type = "outcome",
+    snps = NULL,
+    header = TRUE,
+    phenotype_col = "Phenotype",
+    snp_col = "DBSNP_ID",
+    beta_col = "BETA",
+    se_col = "SE",
+    eaf_col = "AF",
+    effect_allele_col = "ALT",
+    other_allele_col = "REF",
+    pval_col = "P",
+    samplesize_col = "N",
+    chr_col = "CHROM",
+    pos_col = "POS",
+    log_pval = FALSE
+) %>%
+  as_tibble()
+
+
 ```
 
 
 ## Outcomes
 ```{r snoring}
-snoring_path = "~/Dropbox/Research/Data/Summary_Statisitics/Campos2020snor.chrall.CPRA_b37.tsv.gz"
+snoring_path = "resources/Campos2020snor.chrall.CPRA_b37.tsv.gz"
 snoring_ss <- read_tsv(snoring_path, comment = "##",  col_types = coltypes, 
                        col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
 
@@ -167,7 +259,7 @@ snoring_out <- snoring_ss %>%
 ```
 
 ```{r snoring_bmi_adj}
-snorbmiadj_path <- "~/Dropbox/Research/Data/Summary_Statisitics/Campos2020snorbmiadj.chrall.CPRA_b37.tsv.gz"
+snorbmiadj_path <- "resources/Campos2020snorbmiadj.chrall.CPRA_b37.tsv.gz"
 
 snorbmiadj_ss <- read_tsv(snorbmiadj_path, comment = "##",  col_types = coltypes, 
                        col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
@@ -197,69 +289,6 @@ snorbmiadj_out <- snorbmiadj_ss %>%
 ```
 
 ### LD Proxy SNPs 
-```{r get_proxies}
-munge_proxies <- function(LDLink_file, outcome, outcome_clump){
-  LDLink_file_path <- LDLink_file
-  proxy_snps <- read_tsv(LDLink_file_path, skip = 1, col_names = F) %>%
-  rename(id = X1, func = X2, proxy_snp = X3, coord = X4, alleles = X5, maf = X6, 
-         distance = X7, dprime = X8, rsq = X9, correlated_alleles = X10, FORGEdb = X11, RegulomeDB = X12) %>%
-  separate(coord, c('chr', 'pos'), sep = ":") %>%
-  mutate(snp = ifelse(id == 1, proxy_snp, NA), 
-         chr = str_replace(chr, 'chr', ""), 
-         chr = as.numeric(chr), 
-         pos = as.numeric(pos)) %>%
-  fill(snp, .direction = 'down') %>%
-  relocate(snp, .before = proxy_snp) %>%
-  dplyr::select(-id, -func, -FORGEdb, -RegulomeDB) %>%
-  filter(rsq >= 0.8)
-
-# Munge proxy snp and outcome data
-proxy_outcome <- left_join(
-  proxy_snps, outcome, by = c("proxy_snp" = "SNP")
-) %>%
-  separate(correlated_alleles, c("target_a1.outcome", "proxy_a1.outcome", 
-                                 "target_a2.outcome", "proxy_a2.outcome"), sep = ",|=") %>%
-  filter(!is.na(chr.outcome)) %>%
-  arrange(snp, -rsq, abs(distance)) %>%
-  group_by(snp) %>%
-  slice(1) %>%
-  ungroup() %>%
-  mutate(
-     proxy.outcome = TRUE,
-     target_snp.outcome = snp,
-     proxy_snp.outcome = proxy_snp, 
-  ) %>% 
-  mutate(
-       new_effect_allele.outcome = case_when(
-        proxy_a1.outcome == effect_allele.outcome & proxy_a2.outcome == other_allele.outcome ~ target_a1.outcome,
-        proxy_a2.outcome == effect_allele.outcome & proxy_a1.outcome == other_allele.outcome ~ target_a2.outcome,
-        TRUE ~ NA_character_
-     ), 
-      new_other_allele.outcome = case_when(
-        proxy_a1.outcome == effect_allele.outcome & proxy_a2.outcome == other_allele.outcome ~ target_a2.outcome,
-        proxy_a2.outcome == effect_allele.outcome & proxy_a1.outcome == other_allele.outcome ~ target_a1.outcome,
-        TRUE ~ NA_character_
-     ), 
-     effect_allele.outcome = new_effect_allele.outcome, 
-     other_allele.outcome = new_other_allele.outcome
-  ) %>%
-  dplyr::select(-proxy_snp, -chr, -pos, -alleles, -maf, -distance, -rsq, -dprime,  
-         -new_effect_allele.outcome, -new_other_allele.outcome) %>%
-  relocate(target_a1.outcome, proxy_a1.outcome, target_a2.outcome, proxy_a2.outcome, .after = proxy_snp.outcome) %>%
-  rename(SNP = snp) %>%
-  relocate(SNP, .after = samplesize.outcome)
-
-# Merge outcome and proxy outcomes
-outcome_dat <- bind_rows(
-  outcome_clump, proxy_outcome
-) %>% 
-  arrange(chr.outcome, pos.outcome)
-
-outcome_dat
-}
-
-```
-
 ```{r AD_snoring_proxy}
 # extract exposure SNPs present in outcome
 snoring_AD_dat <- semi_join(
@@ -280,6 +309,7 @@ snoring_bmi_dat <- semi_join(
 snoringbmiadj_bmi_dat <- semi_join(
   snorbmiadj_out, BMI_dat, by = "SNP"
 )
+
 ```
 
 
@@ -328,21 +358,21 @@ SnorBMIadj_BMI_mr_dat <- harmonise_data(BMI_dat, snoringbmiadj_bmi_dat, action =
   )
 
 
-mrdat <- bind_rows(
+mrdat_rev <- bind_rows(
   Snor_AD_mr_dat, SnorBMIadj_AD_mr_dat, Snor_BMI_mr_dat, SnorBMIadj_BMI_mr_dat
 )
 
 
-write_csv(mrdat, 'data/ad_bmi_snoring_harmonized_data.csv')
+write_csv(mrdat_rev, 'data/ad_bmi_snoring_harmonized_data.csv')
 
 ```
 
 ## Perform MR analysis 
 ```{r MR}
 # mrdat <- AD_Snor_mr_dat
-mr_res <- mr(mrdat, method_list = c("mr_ivw_fe", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode"))
+mr_rev_res <- mr(mrdat_rev, method_list = c("mr_ivw_fe", "mr_ivw", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode"))
 
-mr_res
+mr_rev_res
 
 ```
 
@@ -381,26 +411,101 @@ write_csv(plei_res, 'results/ad_bmi_sleep_plei_results.csv')
 
 
 ## Plots 
-```{r plots}
-scatter_p <- mr_scatter_plot(mr_res, mrdat)
-scatter_p
+```{r}
+## Joint Scatter plot
+scatter_rev_p <- mr_scatter_plot(mr_res, mrdat)
 
-loo_p <- mr_leaveoneout_plot(res_loo)
-loo_p
+joint_scater <- plot_grid(scatter_rev_p[[1]] + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)), 
+          scatter_rev_p[[2]] + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)), 
+          scatter_rev_p[[3]] + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)), 
+          scatter_rev_p[[4]] + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)))
 
+
+legend_scatter <- get_legend(
+  # create some space to the left of the legend
+  scatter_rev_p[[1]] + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+scatter_out.p <- plot_grid(joint_scater, legend_scatter, rel_heights = c(3, .4), nrow = 2)
+
+ggsave('results/plots/mr_scatter_ad_bmi_snoring.png', plot = scatter_out.p, units = 'in', height = 4, width = 9)
+
+## Funnel plots
 funnel_p <- mr_funnel_plot(res_single)
-funnel_p
+joint_funnel <- plot_grid(
+  funnel_p[[1]] + labs(title = "AD -> SnoringBMIadj") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)),
+  funnel_p[[2]] + labs(title = "AD -> Snoring") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)),
+  funnel_p[[3]] + labs(title = "BMI -> SnoringBMIadj") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)),
+  funnel_p[[4]] + labs(title = "BMI -> Snoring") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)))
 
+
+legend_funnel <- get_legend(
+  # create some space to the left of the legend
+  scatter_rev_p[[1]] + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+funnel_out.p <- plot_grid(joint_funnel, legend_funnel, rel_heights = c(3, .4), nrow = 2)
+
+ggsave('results/plots/mr_funnel_ad_bmi_snoring.png', plot = funnel_out.p, units = 'in', height = 4, width = 9)
+
+## Radial Plots 
 radial_p <-  map(radial_res, function(x){
      plot_radial(x, radial_scale = F, show_outliers = T)
   }
 )
 
-```
+joint_radial <- plot_grid(
+  radial_p[[1]] + labs(title = "AD -> Snoring") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)),
+  radial_p[[2]] + labs(title = "AD -> SnoringBMIadj") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)),
+  radial_p[[3]] + labs(title = "BMI -> Snoring") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)),
+  radial_p[[4]] + labs(title = "BMI -> SnoringBMIadj") + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8))
+  )
 
+ggsave('results/plots/mr_radial_ad_bmi_snoring.png', plot = joint_radial, units = 'in', height = 4, width = 9)
+
+
+```
 
 ## MVMR
 ```{r}
+
+### AD onto BMI
+# extract exposure SNPs present in outcome
+AD_bmi_clump <- semi_join(
+  bmi_out, AD_dat, by = "SNP"
+)
+
+# Exposure SNPs not present in outomce
+AD_bmi_wo <- anti_join(
+  AD_dat, bmi_out, by = "SNP"
+)
+
+# Use LDLinkR to identify proxy snps
+LDproxy_batch(AD_bmi_wo$SNP, 
+        pop = "CEU", 
+        r2d = "r2", 
+        token = 'a6deee62cc4a', 
+        append = TRUE,
+        genome_build = "grch37")
+system("mv combined_query_snp_list_grch37.txt data/bmi_ad_proxy_snps.txt")
+
+# Munge proxy snp file
+ad_bmi_dat <- munge_proxies("data/bmi_ad_proxy_snps.txt", bmi_out, AD_bmi_clump)
+
+ad_bmi_mr_dat <- harmonise_data(AD_dat, ad_bmi_dat, action = 2) %>% 
+    as_tibble()
+
+ad_bmi_res <- mr(ad_bmi_mr_dat, method_list = c("mr_ivw_fe", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode"))
+
+```
+
+```{r}
+
+mvmr_snps <- c(pull(AD_dat, SNP), pull(BMI_dat, SNP))
 
 bmi_ad_snps <- bind_rows(
   AD_exp %>% filter(pval.exposure < 5e-8), 
@@ -411,7 +516,7 @@ bmi_ad_snps <- bind_rows(
   mutate(pval.exposure = pmin(AD, BMI, na.rm = T)) 
 
 
-test <- bmi_ad_snps %>% 
+bmi_ad_clump <- bmi_ad_snps %>% 
   clump_data(.,
   clump_kb = 10000,
   clump_r2 = 0.001,
@@ -420,61 +525,152 @@ test <- bmi_ad_snps %>%
   pop = "EUR"
 )
 
-bmi_ad_dat <- bind_rows(
-  AD_exp %>% filter(SNP %in% test$SNP), 
-  bmi_exp %>% filter(SNP %in% test$SNP), 
+bmi_ad_mvexp <- bind_rows(
+  AD_exp %>% filter(SNP %in% mvmr_snps), 
+  bmi_exp %>% filter(SNP %in% mvmr_snps), 
+  ad_bmi_dat %>%
+      mutate(SNP = target_snp.outcome) %>%
+      filter(proxy.outcome == TRUE) %>%
+      select(SNP, ends_with('outcome')) %>%
+      select(-starts_with('proxy'), -starts_with('target')) %>%
+      magrittr::set_colnames(str_replace(colnames(.), 'outcome', 'exposure'))
+) %>%
+  mutate(
+    id.exposure = ifelse(exposure == 'BMI', 'TW76wp', id.exposure)
 )
 
-snoring_mvmr_out <- snoring_out %>% filter(SNP %in% test$SNP)
-# snoring_mvmr_out <- snorbmiadj_out %>% filter(SNP %in% test$SNP)
+bmi_ad_mvexp %>%
+   arrange(chr.exposure, pos.exposure) %>%
+   select(SNP, exposure, pval.exposure) %>%
+   pivot_wider(names_from = exposure, values_from = pval.exposure) %>%
+   count(AD < 5e-8, BMI < 5e-8)
+  
+```
 
-bmi_ad_mvdat <- mv_harmonise_data(bmi_ad_dat, snoring_mvmr_out)
+### TwoSampleMR Package
+```{r}
+snoring_mvmr_out <- snoring_out %>% filter(SNP %in% bmi_ad_mvexp$SNP)
+
+## TwoSampleMR
+# https://mrcieu.github.io/TwoSampleMR/articles/perform_mr.html#multivariable-mr
+bmi_ad_mvdat <- mv_harmonise_data(bmi_ad_mvexp, snoring_mvmr_out)
 bmi_ad_res <- mv_multiple(bmi_ad_mvdat)
 bmi_ad_res
 
-test <- cbind(bmi_ad_mvdat$exposure_beta, 
-      bmi_ad_mvdat$exposure_se, 
-      bmi_ad_mvdat$outcome_beta, 
-      bmi_ad_mvdat$outcome_se) %>%
-  as.data.frame() %>%
-  rownames_to_column() %>%
-  as.matrix()
+write_csv(bmi_ad_res$result, 'results/bmi_ad_snoring_mvmr_results.csv')
 
 
-F.data <- format_mvmr(BXGs = test[,c(2,3)],
-                    BYG = test[,6],
-                    seBXGs = test[,c(4,5)],
-                    seBYG = test[,7],
-                    RSID = test[,1])
-
-sres <- strength_mvmr(r_input = F.data, gencov = 0)
-
-res <- ivw_mvmr(r_input = F.data)
-
-mvmrcovmatrix<-matrix(c(1,-0.1,-0.05,-0.1,1,0.2,-0.05,0.2,1), nrow = 3, ncol = 3)
-Xcovmat<-phenocov_mvmr(mvmrcovmatrix,F.data[,7:9])
-sres2 <- strength_mvmr(r_input = F.data, gencov = Xcovmat)
-
-pres <- pleiotropy_mvmr(r_input = F.data, gencov = 0)
-
-id_exposure <- c("ieu-a-299", "ieu-a-300", "ieu-a-302")
-id_outcome <- "ieu-a-7"
-
-
-exposure_dat <- mv_extract_exposures(id_exposure)
-outcome_dat <- extract_outcome_data(exposure_dat$SNP, id_outcome)
-mvdat <- mv_harmonise_data(exposure_dat, outcome_dat)
-res <- mv_multiple(mvdat)
 ```
 
+### MVMR package
+
+```{r}
+## MVMR
+# https://wspiller.github.io/MVMR/articles/MVMR.html
+bmi_ad_mvmr_dat <- cbind(bmi_ad_mvdat$exposure_beta, 
+        bmi_ad_mvdat$exposure_se, 
+        bmi_ad_mvdat$outcome_beta, 
+        bmi_ad_mvdat$outcome_se
+      ) %>%
+      as.data.frame() %>%
+      rownames_to_column() %>%
+      as.matrix()
+
+F.data <- format_mvmr(BXGs = bmi_ad_mvmr_dat[,c(2,3)],
+                    BYG = bmi_ad_mvmr_dat[,6],
+                    seBXGs = bmi_ad_mvmr_dat[,c(4,5)],
+                    seBYG = bmi_ad_mvmr_dat[,7],
+                    RSID = bmi_ad_mvmr_dat[,1])
+
+sres <- strength_mvmr(r_input = F.data, gencov = 0)
+pres <- pleiotropy_mvmr(r_input = F.data, gencov = 0)
+res <- ivw_mvmr(r_input = F.data)
+
+F.data_rmvmr <- format_rmvmr(BXGs = bmi_ad_mvmr_dat[,c(2,3)],
+                    BYG = bmi_ad_mvmr_dat[,6],
+                    seBXGs = bmi_ad_mvmr_dat[,c(4,5)],
+                    seBYG = bmi_ad_mvmr_dat[,7],
+                    RSID = bmi_ad_mvmr_dat[,1])
+
+## RMVMR
+res_rmvrm <- ivw_rmvmr(F.data_rmvmr)
+sres_rmvrm <- strength_rmvmr(F.data_rmvmr, gencov = 0)
+rmvrm_p <- plot_rmvmr(F.data_rmvmr, res_rmvrm)
+
+ggsave('results/plots/rmvmr_bmi_ad_snoring.png', plot = rmvrm_p[[1]], units = 'in', height = 4, width = 9)
+
+```
+
+### MendelianRandomization Package
+
+```{r}
 
 
+MRMVInputObject <- MendelianRandomization::mr_mvinput(
+  bx = bmi_ad_mvdat$exposure_beta, 
+  bxse = bmi_ad_mvdat$exposure_se,
+  by = bmi_ad_mvdat$outcome_beta,
+  byse = bmi_ad_mvdat$outcome_se,
+  snps = bmi_ad_mvmr_dat[,1], 
+  exposure = c('AD', 'BMI'), 
+  outcome = 'Snoring'
+  )
+
+MRMV_ivw <- MendelianRandomization::mr_mvivw(MRMVInputObject, 
+                       model="default", 
+                       correl=FALSE, 
+                       distribution="normal",
+                       alpha = 0.05)
+
+MRMV_ivw_df <- cbind(MRMV_ivw@Exposure, MRMV_ivw@Outcome, MRMV_ivw@Estimate, MRMV_ivw@StdError, MRMV_ivw@Pvalue) %>%
+  as_tibble() %>%
+  magrittr::set_colnames(c("Exposure", "Outcome", "b", "se", "p")) %>%
+  mutate(method = "MRMV-IVW")
+
+MRMV_egger <- MendelianRandomization::mr_mvegger(MRMVInputObject, orientate = 1, correl = FALSE, distribution = "normal", alpha = 0.05)
+
+MRMV_egger_df <- cbind(MRMV_egger@Exposure, MRMV_egger@Outcome, MRMV_egger@Estimate, MRMV_egger@StdError.Est, MRMV_egger@Pvalue.Est) %>%
+  as_tibble() %>%
+  magrittr::set_colnames(c("Exposure", "Outcome", "b", "se", "p")) %>%
+  mutate(method = "MRMV-Egger")
 
 
+MRMV_wme <- MendelianRandomization::mr_mvmedian( MRMVInputObject, distribution = "normal", alpha = 0.05, iterations = 10000, seed = 314159265 )
+
+MRMV_wme_df <- cbind(MRMV_wme@Exposure, MRMV_wme@Outcome, MRMV_wme@Estimate, MRMV_wme@StdError, MRMV_wme@Pvalue) %>%
+  as_tibble() %>%
+  magrittr::set_colnames(c("Exposure", "Outcome", "b", "se", "p")) %>%
+  mutate(method = "MRMV-WME")
 
 
+MRMV_wbe_res <- MVMRmode::mv_mrmode(Bout = bmi_ad_mvdat$outcome_beta, 
+                    Bexp = bmi_ad_mvdat$exposure_beta, 
+                    SEout = bmi_ad_mvdat$outcome_se, 
+                    SEexp = bmi_ad_mvdat$exposure_se, 
+                    Psi=0, CIMin = NA, CIMax = NA, CIStep = 0.001, alpha = 0.05, 
+                    residual="IVW",Mode="CM",weighting = "weighted", stderror = "simple", 
+                    phi = 1,distribution = "normal",iterations = 10000)
+
+MRMV_wbe_df <- as_tibble(MRMV_wbe_res) %>%
+  rename(b = Estimate, p = Pvalue) %>%
+  mutate(Exposure = c("AD", "BMI"), 
+         Outcome = "Snoring", 
+         method = 'MRMV_WBE') %>%
+  mutate_if(is.double, as.character)
 
 
+MRMV_out <- 
+  bind_rows(
+    MRMV_ivw_df, MRMV_egger_df, MRMV_wme_df, MRMV_wbe_df
+  ) %>%
+  select(-CILower, -CIUpper, -NvalidSNPs, -Nrange) %>%
+  relocate(method, .after = Outcome) %>%
+  mutate_at(vars(b, se, p), as.double)
+
+write_csv(MRMV_out, 'results/bmi_ad_snoring_mvmr_sensetivity_results.csv')
+
+
+```
 
 
 
