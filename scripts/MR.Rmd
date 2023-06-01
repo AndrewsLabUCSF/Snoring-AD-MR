@@ -527,7 +527,10 @@ ggsave('results/plots/mr_radial_outlier.png', plot = radial_outlier_p, units = '
 ```
 
 
+```{r render}
+rmarkdown::render()
 
+```
 
 
 
