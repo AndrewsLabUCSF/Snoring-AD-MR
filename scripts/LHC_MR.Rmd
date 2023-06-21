@@ -79,26 +79,41 @@ snorbmiadj_ss <- read_tsv(snorbmi_path, comment = "##",  col_types = coltypes,
 
 
 ```{r read_outcome}
+# Clinical AD 
 outcome_path = "resources/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
 AD_ss <- read_tsv(outcome_path, comment = "##",  col_types = coltypes, 
                         col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))  %>%
   # filter(!(chr.outcome == 19 & between(pos.outcome, 44912079, 45912079)))
   rename(SNP = DBSNP_ID) 
 
+# AD/dementia 
+dementia_path = "resources/Bellenguez2022load.chrall.CPRA_b37.tsv.gz"
+dementia_ss = read_tsv(
+    dementia_path, comment = "##", col_types = coltypes, # n_max = 100,
+    col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))  %>%
+    filter(between(AF, 0.001, 0.999)) %>%
+    filter(nchar(REF) == 1 & nchar(ALT) == 1) %>%
+    filter(!is.na(DBSNP_ID)) %>%
+    rename(SNP = DBSNP_ID) 
+
 ```
 
 ```{r merge}
 ## Step 1
-### Snoring 
-snoring.names=c("Snoring","AD")
-snoring.files = list(snoring_ss, AD_ss)
-snoring_df = merge_sumstats(snoring.files, snoring.names, LD.filepath, rho.filepath)
+### Snoring + AD
+snoring_ad.names=c("Snoring","AD")
+snoring_ad.files = list(snoring_ss, AD_ss)
+snoring_ad_df = merge_sumstats(snoring_ad.files, snoring_ad.names, LD.filepath, rho.filepath)
 
+### Snoring + Dementia
+snoring_dem.names=c("Snoring","Dementia")
+snoring_dem.files = list(snoring_ss, dementia_ss)
+snoring_dem_df = merge_sumstats(snoring_dem.files, snoring_dem.names, LD.filepath, rho.filepath)
 
 ### Snoring bmi adjusted
-snorbmiadj.names=c("SnoringBMIadj","AD")
-snorbmiadj.files = list(snorbmiadj_ss, AD_ss)
-snorbmi_df = merge_sumstats(snorbmiadj.files, snorbmiadj.names, LD.filepath, rho.filepath)
+snorbmiadj_ad.names=c("SnoringBMIadj","AD")
+snorbmiadj_ad.files = list(snorbmiadj_ss, AD_ss)
+snorbmi_ad_df = merge_sumstats(snorbmiadj_ad.files, snorbmiadj_ad.names, LD.filepath, rho.filepath)
 
 ```
 
@@ -106,12 +121,16 @@ snorbmi_df = merge_sumstats(snorbmiadj.files, snorbmiadj.names, LD.filepath, rho
 ## Step 2: Calculating smart starting points for the likelihood optimisation
 
 ```{r read_merge}
-# Snoring
-snoring_SP_list = calculate_SP(snoring_df,snoring.names,run_ldsc=TRUE,run_MR=TRUE,hm3=hm3,ld=ld,nStep = 2,
+# Snoring + AD
+snoring_ad_SP_list = calculate_SP(snoring_ad_df,snoring_ad.names,run_ldsc=TRUE,run_MR=TRUE,hm3=hm3,ld=ld,nStep = 2,
+                       SP_single=3,SP_pair=50,SNP_filter=10)
+
+# Snoring + Dementia
+snoring_dem_SP_list = calculate_SP(snoring_dem_df,snoring_dem.names,run_ldsc=TRUE,run_MR=TRUE,hm3=hm3,ld=ld,nStep = 2,
                        SP_single=3,SP_pair=50,SNP_filter=10)
 
 # Snoring
-snorbmi_SP_list = calculate_SP(snorbmi_df,snorbmiadj.names,run_ldsc=TRUE,run_MR=TRUE,hm3=hm3,ld=ld,nStep = 2,
+snorbmi_ad_SP_list = calculate_SP(snorbmi_ad_df,snorbmiadj_ad.names,run_ldsc=TRUE,run_MR=TRUE,hm3=hm3,ld=ld,nStep = 2,
                        SP_single=3,SP_pair=50,SNP_filter=10)
 
 ```
@@ -122,12 +141,16 @@ snorbmi_SP_list = calculate_SP(snorbmi_df,snorbmiadj.names,run_ldsc=TRUE,run_MR=
 ```{r read_merge}
 
 ## Step 3
-snoring_res = lhc_mr(snoring_SP_list, snoring.names, paral_method="lapply", nCores = 2, nBlock=200)
-snoring_res %>% as_tibble() %>% write_csv(., glue("results/snoring_lhcmr-{date}.csv"))
+snoring_ad_res = lhc_mr(snoring_ad_SP_list, snoring_ad.names, paral_method="lapply", nCores = 2, nBlock=200)
+snoring_ad_res %>% as_tibble() %>% write_csv(., glue("results/snoring_ad_lhcmr-{date}.csv"))
 
 ## Step 3
-snorbmi_res = lhc_mr(snorbmi_SP_list, snorbmiadj.names, paral_method="lapply", nCores = 2, nBlock=200)
-snorbmi_res %>% as_tibble() %>% write_csv(., "results/snorbmi_lhcmr.csv")
+snoring_dem_res = lhc_mr(snoring_dem_SP_list, snoring_dem.names, paral_method="lapply", nCores = 2, nBlock=200)
+snoring_dem_res %>% as_tibble() %>% write_csv(., glue("results/snoring_dem_lhcmr-{date}.csv"))
+
+## Step 3
+snorbmi_ad_res = lhc_mr(snorbmi_ad_SP_list, snorbmiadj_ad.names, paral_method="lapply", nCores = 2, nBlock=200)
+snorbmi_ad_res %>% as_tibble() %>% write_csv(., "results/snorbmi_ad_lhcmr-{date}.csv")
 
 ```
 
