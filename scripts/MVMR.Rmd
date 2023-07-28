@@ -14,6 +14,8 @@ knitr::opts_knit$set(root.dir = '~/gitcode/Snoring-AD-MR')
 ```{r packages}
 library(tidyverse)    # Data wrangling 
 library(TwoSampleMR)  # MR 
+library(MVMR)
+library(RMVMR)
 library(LDlinkR)      # LD and proxy snps
 library(RadialMR)     # Radial MR sensetivity analysis 
 library(phenoscanner)
@@ -296,6 +298,11 @@ snoring_AD_dat <- semi_join(
 )
 
 # extract exposure SNPs present in outcome
+bmi_AD_dat <- semi_join(
+  bmi_out, AD_dat, by = "SNP"
+)
+
+# extract exposure SNPs present in outcome
 snoringbmiadj_AD_dat <- semi_join(
   snorbmiadj_out, AD_dat, by = "SNP"
 )
@@ -373,30 +380,62 @@ write_csv(mrdat_rev, 'data/ad_bmi_snoring_harmonized_data.csv')
 mr_rev_res <- mr(mrdat_rev, method_list = c("mr_ivw_fe", "mr_ivw", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode"))
 
 mr_rev_res
-
+generate_odds_ratios(mr_rev_res) %>% group_split(exposure, outcome)
 ```
 
 
 ## Perform Sensentivity analysis
 ```{r sensetivity}
 # Heterogeneity statistics 
-het_res <-mr_heterogeneity(mrdat, method_list = c("mr_egger_regression", "mr_ivw"))
+het_res <- mr_heterogeneity(mrdat_rev, method_list = c("mr_egger_regression", "mr_ivw"))
 
 # Horizontal pleitropy
-plei_res <- mr_pleiotropy_test(mrdat)
+plei_res <- mr_pleiotropy_test(mrdat_rev)
 
 # Leave-one-out analysis 
-res_loo <- mr_leaveoneout(mrdat, method = mr_ivw_fe) %>% as_tibble()
+res_loo <- mr_leaveoneout(mrdat_rev, method = mr_ivw_fe) %>% as_tibble()
 
 # Single SNP anlaysis 
-res_single <- mr_singlesnp(mrdat, all_method = c("mr_ivw_fe", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode")) %>% as_tibble()
+res_single <- mr_singlesnp(mrdat_rev, all_method = c("mr_ivw_fe", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode")) %>% as_tibble()
 
 # Radial MR 
-radial_dat <- mrdat %>% filter(mr_keep == T) %>% dat_to_RadialMR()
+radial_dat <- mrdat_rev %>% filter(mr_keep == T) %>% dat_to_RadialMR()
 radial_res <- map(radial_dat, function(x){
     ivw_radial(x, alpha = 0.05/nrow(x))
   }
 )
+
+# Fstat
+
+## F statistic. Burgess et al 2011
+f_stat = function(N, K, R){
+  f = ((N-K-1) / K) * (R/(1-R))
+  f
+  }
+
+## Proportion of phenotypic variance explained by SNP 
+## https://doi.org/10.1371/journal.pone.0120758.s001
+snp.pve <- function(eaf, beta, se, n){
+  (2*eaf*(1 - eaf)*beta^2) / (2 * beta * eaf * (1-eaf) + se^2 * 2 * n * eaf * (1-eaf))
+}
+
+f_res_rev <- mrdat_rev %>%
+  # filter(exposure == "AD" & outcome == "Snoring") %>% 
+  group_by(exposure, outcome) %>%
+  select(SNP, exposure, outcome, effect_allele.exposure, eaf.exposure, beta.exposure, se.exposure, samplesize.exposure) %>%
+  mutate(
+    samplesize.exposure = ifelse(exposure == "BMI", 681275, samplesize.exposure),
+    eaf.exposure = ifelse(SNP == "rs9270599", 0.6, eaf.exposure),
+    pve = snp.pve(eaf.exposure, beta.exposure, se.exposure, samplesize.exposure), 
+    f = f_stat(samplesize.exposure, 1, pve),
+    # f = abs(beta.exposure)^2 / se.exposure^2
+  ) %>% 
+  summarise(
+    pve = sum(pve, na.rm = T), 
+    k = n(), 
+    samplesize = max(samplesize.exposure), 
+    f = mean(f, na.rm = T),
+  )
 
 
 # Phenoscanner 
@@ -407,13 +446,14 @@ phewas_dat <- phenoscanner(snpquery=radial_res$outliers$SNP)
 write_csv(mr_res, 'results/ad_bmi_sleep_mr_results.csv')
 write_csv(het_res, 'results/ad_bmi_sleep_het_results.csv')
 write_csv(plei_res, 'results/ad_bmi_sleep_plei_results.csv')
+write_csv(f_res_rev, 'results/ad_bmi_f_results.csv')
 ```
 
 
 ## Plots 
 ```{r}
 ## Joint Scatter plot
-scatter_rev_p <- mr_scatter_plot(mr_res, mrdat)
+scatter_rev_p <- mr_scatter_plot(mr_rev_res, mrdat_rev)
 
 joint_scater <- plot_grid(scatter_rev_p[[1]] + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)), 
           scatter_rev_p[[2]] + theme_bw() + theme(legend.position = 'non', text = element_text(size = 8)), 
@@ -454,7 +494,7 @@ ggsave('results/plots/mr_funnel_ad_bmi_snoring.png', plot = funnel_out.p, units 
 
 ## Radial Plots 
 radial_p <-  map(radial_res, function(x){
-     plot_radial(x, radial_scale = F, show_outliers = T)
+     plot_radial(x, radial_scale = F, show_outliers = F)
   }
 )
 
@@ -468,6 +508,247 @@ joint_radial <- plot_grid(
 ggsave('results/plots/mr_radial_ad_bmi_snoring.png', plot = joint_radial, units = 'in', height = 4, width = 9)
 
 
+```
+
+```{r}
+## Scatter plot
+ad_snoring_mr_p <- mr_scatter_plot(
+  filter(mr_rev_res, exposure == "AD", outcome == "Snoring", method != "Inverse variance weighted"), 
+  filter(mrdat_rev, exposure == "AD", outcome == "Snoring")
+)
+
+ad_snoring_mr_p_out <- ad_snoring_mr_p[[1]] + 
+  labs(tag = "A") + 
+  theme_bw() + 
+  scale_color_brewer(
+    palette = "Set1", 
+    labels = c("IVW", "MR-Egger", "WME", "WMBE")) + 
+  guides(color = guide_legend(ncol = 1)) + 
+  theme(
+    legend.position = 'right', 
+    text = element_text(size = 8),
+    plot.tag = element_text(face = "bold")
+    )
+
+## Radial plot
+ad_snoring_radial_p_out <- radial_p[[1]] + 
+  labs(tag = "C") + 
+  theme_bw() + 
+  theme(
+    legend.position = 'none', 
+    text = element_text(size = 8), 
+    aspect.ratio=3/5,
+    plot.tag = element_text(face = "bold"),
+    plot.title = element_blank()
+    ) 
+
+## Funnel plot 
+
+ad_snoring_res_single_p <- mr_funnel_plot(
+  filter(res_single, exposure == "AD", outcome == "Snoring") 
+)
+
+ad_snoring_fun_p_out <- ad_snoring_res_single_p[[1]] + 
+  labs(tag = "B") + 
+  theme_bw() + 
+  scale_color_brewer(
+    palette = "Set1", 
+    labels = c("IVW", "MR-Egger", "WME", "WMBE")) + 
+  theme(
+    legend.position = 'bottom',
+    text = element_text(size = 8),
+    plot.tag = element_text(face = "bold"), 
+    )
+
+## Legend
+legend_scatter <- get_legend(
+  # create some space to the left of the legend
+  ad_snoring_mr_p_out + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+## Cofficent plot 
+ad_snoring_coef_p <- filter(mr_rev_res, exposure == "AD", outcome == "Snoring", method != "Inverse variance weighted") %>% 
+  generate_odds_ratios() %>% 
+  mutate(
+   method = fct_recode(method, "MR-Egger" = "MR Egger", "WME" = "Weighted median", "WMBE" = "Weighted mode", 
+                       "IVW" = "Inverse variance weighted (fixed effects)"), 
+   method = fct_relevel(method,  "WMBE","WME", "MR-Egger","IVW")
+  ) %>%
+  ggplot(., aes(x = or, y = method, color = method)) + 
+    geom_vline(xintercept = 1, linetype = 2) + 
+    geom_point() + 
+    geom_errorbar(aes(xmin = or_lci95, xmax = or_uci95), width = 0) + 
+    scale_color_manual(values = c("#984EA3", "#4DAF4A", "#377EB8", "#E41A1C")) + 
+    labs(tag = "D", x = "OR") + 
+    theme_bw() + 
+    theme(
+        legend.position = 'bottom',
+        text = element_text(size = 8),
+        plot.tag = element_text(face = "bold"), 
+        axis.title.y = element_blank()
+  
+    )
+  
+  
+    
+   
+
+png("docs/ad_snoring_mr.png", width = 7.5, height = 4, units = "in", res = 300)
+pageCreate(width = 7.5, height = 4, default.units = "inches")
+
+plotGG(
+  plot = ad_snoring_mr_p_out + theme(legend.position = 'none'),
+  x = 0, y = 0,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = ad_snoring_fun_p_out  + theme(legend.position = 'none'),
+  x = 3, y = 0,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = legend_scatter,
+  x = 6.1, y = 0,
+  width = 0.5, height = 2, just = c("left", "top")
+)
+
+
+plotGG(
+  plot = ad_snoring_radial_p_out,
+  x = 0, y = 2,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = ad_snoring_coef_p + theme(legend.position = 'none'),
+  x = 3, y = 2,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+
+pageGuideHide()
+dev.off()
+```
+
+```{r}
+## Scatter plot
+bmi_snoring_mr_p <- mr_scatter_plot(
+  filter(mr_rev_res, exposure == "BMI", outcome == "Snoring", method != "Inverse variance weighted"), 
+  filter(mrdat_rev, exposure == "BMI", outcome == "Snoring")
+)
+
+bmi_snoring_mr_p_out <- bmi_snoring_mr_p[[1]] + 
+  labs(tag = "A") + 
+  theme_bw() + 
+  scale_color_brewer(
+    palette = "Set1", 
+    labels = c("IVW", "MR-Egger", "WME", "WMBE")) + 
+  guides(color = guide_legend(ncol = 1)) + 
+  theme(
+    legend.position = 'right', 
+    text = element_text(size = 8),
+    plot.tag = element_text(face = "bold")
+    )
+
+## Radial plot
+bmi_snoring_radial_p_out <- radial_p[[3]] + 
+  labs(tag = "C") + 
+  theme_bw() + 
+  theme(
+    legend.position = 'none', 
+    text = element_text(size = 8), 
+    aspect.ratio=3/5,
+    plot.tag = element_text(face = "bold"),
+    plot.title = element_blank()
+    ) 
+
+## Funnel plot 
+
+bmi_snoring_res_single_p <- mr_funnel_plot(
+  filter(res_single, exposure == "BMI", outcome == "Snoring") 
+)
+
+bmi_snoring_fun_p_out <- bmi_snoring_res_single_p[[1]] + 
+  labs(tag = "B") + 
+  theme_bw() + 
+  scale_color_brewer(
+    palette = "Set1", 
+    labels = c("IVW", "MR-Egger", "WME", "WMBE")) + 
+  theme(
+    legend.position = 'bottom',
+    text = element_text(size = 8),
+    plot.tag = element_text(face = "bold"), 
+    )
+
+## Legend
+bmi_legend_scatter <- get_legend(
+  # create some space to the left of the legend
+  bmi_snoring_mr_p_out + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+## Cofficent plot 
+bmi_snoring_coef_p <- filter(mr_rev_res, exposure == "BMI", outcome == "Snoring", method != "Inverse variance weighted") %>% 
+  generate_odds_ratios() %>% 
+  mutate(
+   method = fct_recode(method, "MR-Egger" = "MR Egger", "WME" = "Weighted median", "WMBE" = "Weighted mode", 
+                       "IVW" = "Inverse variance weighted (fixed effects)"), 
+   method = fct_relevel(method,  "WMBE","WME", "MR-Egger","IVW")
+  ) %>%
+  ggplot(., aes(x = or, y = method, color = method)) + 
+    geom_vline(xintercept = 1, linetype = 2) + 
+    geom_point() + 
+    geom_errorbar(aes(xmin = or_lci95, xmax = or_uci95), width = 0) + 
+    scale_color_manual(values = c("#984EA3", "#4DAF4A", "#377EB8", "#E41A1C")) + 
+    labs(tag = "D", x = "OR") + 
+    theme_bw() + 
+    theme(
+        legend.position = 'bottom',
+        text = element_text(size = 8),
+        plot.tag = element_text(face = "bold"), 
+        axis.title.y = element_blank()
+  
+    )
+  
+
+png("docs/bmi_snoring_mr.png", width = 7.5, height = 4, units = "in", res = 300)
+pageCreate(width = 7.5, height = 4, default.units = "inches")
+
+plotGG(
+  plot = bmi_snoring_mr_p_out + theme(legend.position = 'none'),
+  x = 0, y = 0,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = bmi_snoring_fun_p_out  + theme(legend.position = 'none'),
+  x = 3, y = 0,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = bmi_legend_scatter,
+  x = 6.1, y = 0,
+  width = 0.5, height = 2, just = c("left", "top")
+)
+
+
+plotGG(
+  plot = bmi_snoring_radial_p_out,
+  x = 0, y = 2,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = bmi_snoring_coef_p + theme(legend.position = 'none'),
+  x = 3, y = 2,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+
+pageGuideHide()
+dev.off()
 ```
 
 ## MVMR
@@ -497,7 +778,8 @@ system("mv combined_query_snp_list_grch37.txt data/bmi_ad_proxy_snps.txt")
 ad_bmi_dat <- munge_proxies("data/bmi_ad_proxy_snps.txt", bmi_out, AD_bmi_clump)
 
 ad_bmi_mr_dat <- harmonise_data(AD_dat, ad_bmi_dat, action = 2) %>% 
-    as_tibble()
+    as_tibble() %>%
+    bind_rows(filter(Snor_AD_mr_dat, SNP %in% pull(., SNP)))
 
 ad_bmi_res <- mr(ad_bmi_mr_dat, method_list = c("mr_ivw_fe", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode"))
 
@@ -549,11 +831,16 @@ bmi_ad_mvexp %>%
 
 ### TwoSampleMR Package
 ```{r}
+## Harmonize data 
 snoring_mvmr_out <- snoring_out %>% filter(SNP %in% bmi_ad_mvexp$SNP)
 
 ## TwoSampleMR
 # https://mrcieu.github.io/TwoSampleMR/articles/perform_mr.html#multivariable-mr
 bmi_ad_mvdat <- mv_harmonise_data(bmi_ad_mvexp, snoring_mvmr_out)
+
+write_rds(bmi_ad_mvdat, 'data/bmi_ad_mvdat.rds.gz')
+
+## MVMR
 bmi_ad_res <- mv_multiple(bmi_ad_mvdat)
 bmi_ad_res
 
@@ -571,8 +858,9 @@ bmi_ad_mvmr_dat <- cbind(bmi_ad_mvdat$exposure_beta,
         bmi_ad_mvdat$exposure_se, 
         bmi_ad_mvdat$outcome_beta, 
         bmi_ad_mvdat$outcome_se
-      ) %>%
+      ) %>% 
       as.data.frame() %>%
+      magrittr::set_colnames(., c("exp1_b", "exp2_b", "exp1_se", "exp2_se", "exp1_p", "exp2_p")) %>%
       rownames_to_column() %>%
       as.matrix()
 
@@ -581,23 +869,62 @@ F.data <- format_mvmr(BXGs = bmi_ad_mvmr_dat[,c(2,3)],
                     seBXGs = bmi_ad_mvmr_dat[,c(4,5)],
                     seBYG = bmi_ad_mvmr_dat[,7],
                     RSID = bmi_ad_mvmr_dat[,1])
+mvmrcovmatrix <- matrix(data = c(1, 0.01, 1, 0.01), nrow = 2, ncol = 2)
 
 sres <- strength_mvmr(r_input = F.data, gencov = 0)
 pres <- pleiotropy_mvmr(r_input = F.data, gencov = 0)
 res <- ivw_mvmr(r_input = F.data)
 
+qhet_res <- qhet_mvmr(F.data, mvmrcovmatrix, CI = T, iterations = 100)
+
+## RMVMR
 F.data_rmvmr <- format_rmvmr(BXGs = bmi_ad_mvmr_dat[,c(2,3)],
                     BYG = bmi_ad_mvmr_dat[,6],
                     seBXGs = bmi_ad_mvmr_dat[,c(4,5)],
                     seBYG = bmi_ad_mvmr_dat[,7],
                     RSID = bmi_ad_mvmr_dat[,1])
 
-## RMVMR
 res_rmvrm <- ivw_rmvmr(F.data_rmvmr)
 sres_rmvrm <- strength_rmvmr(F.data_rmvmr, gencov = 0)
 rmvrm_p <- plot_rmvmr(F.data_rmvmr, res_rmvrm)
 
 ggsave('results/plots/rmvmr_bmi_ad_snoring.png', plot = rmvrm_p[[1]], units = 'in', height = 4, width = 9)
+```
+
+```{r}
+rmvrm_p_out <- rmvrm_p[[1]] + scale_color_manual(
+  values = c("#E69F00", "#56B4E9"),  
+  labels = c("BMI", "AD")
+    ) + 
+  labs(color = "Exposure") + 
+  theme(
+    legend.title = element_blank(), 
+    plot.title = element_blank()
+  ) 
+
+ggsave('docs/rmvmr_bmi_ad_snoring.png', plot = rmvrm_p_out, units = 'in', height = 4, width = 7.5)
+
+
+```
+
+```{r}
+
+sres %>%
+  pivot_longer(names_to = 'exposure', values_to = 'f', cols = c(exposure1, exposure2)) %>%
+  mutate(
+    exposure = fct_recode(exposure, 'BMI' = 'exposure1', 'AD' = 'exposure2' ), 
+    outcome = 'Snoring'
+  ) %>%
+  relocate(outcome, .after = exposure) %>%
+  write_csv(., 'results/bmi_ad_snoring_sres.csv')
+
+as_tibble(pres) %>% 
+  mutate(
+    exposure = c("AD | BMI"), 
+    outcome = 'Snoring'
+  ) %>%
+  relocate(exposure, outcome) %>%
+  write_csv(., 'results/bmi_ad_snoring_q_res.csv')
 
 ```
 
@@ -605,17 +932,18 @@ ggsave('results/plots/rmvmr_bmi_ad_snoring.png', plot = rmvrm_p[[1]], units = 'i
 
 ```{r}
 
-
+## Format data 
 MRMVInputObject <- MendelianRandomization::mr_mvinput(
   bx = bmi_ad_mvdat$exposure_beta, 
   bxse = bmi_ad_mvdat$exposure_se,
   by = bmi_ad_mvdat$outcome_beta,
   byse = bmi_ad_mvdat$outcome_se,
   snps = bmi_ad_mvmr_dat[,1], 
-  exposure = c('AD', 'BMI'), 
+  exposure = c('BMI', 'AD'), 
   outcome = 'Snoring'
   )
 
+## IVW
 MRMV_ivw <- MendelianRandomization::mr_mvivw(MRMVInputObject, 
                        model="default", 
                        correl=FALSE, 
@@ -627,6 +955,7 @@ MRMV_ivw_df <- cbind(MRMV_ivw@Exposure, MRMV_ivw@Outcome, MRMV_ivw@Estimate, MRM
   magrittr::set_colnames(c("Exposure", "Outcome", "b", "se", "p")) %>%
   mutate(method = "MRMV-IVW")
 
+## MR-Egger 
 MRMV_egger <- MendelianRandomization::mr_mvegger(MRMVInputObject, orientate = 1, correl = FALSE, distribution = "normal", alpha = 0.05)
 
 MRMV_egger_df <- cbind(MRMV_egger@Exposure, MRMV_egger@Outcome, MRMV_egger@Estimate, MRMV_egger@StdError.Est, MRMV_egger@Pvalue.Est) %>%
@@ -634,7 +963,15 @@ MRMV_egger_df <- cbind(MRMV_egger@Exposure, MRMV_egger@Outcome, MRMV_egger@Estim
   magrittr::set_colnames(c("Exposure", "Outcome", "b", "se", "p")) %>%
   mutate(method = "MRMV-Egger")
 
+MRMV_egger_intercept <- cbind(MRMV_egger@Exposure, MRMV_egger@Outcome, MRMV_egger@Intercept, MRMV_egger@StdError.Int, MRMV_egger@Pvalue.Int) %>%
+  as_tibble() %>%
+  magrittr::set_colnames(c("Exposure", "Outcome", "b", "se", "p")) %>%
+  slice(1) %>%
+  mutate(method = "MRMV-Egger_intecept", 
+         Exposure = "AD | BMI")
 
+
+## WME
 MRMV_wme <- MendelianRandomization::mr_mvmedian( MRMVInputObject, distribution = "normal", alpha = 0.05, iterations = 10000, seed = 314159265 )
 
 MRMV_wme_df <- cbind(MRMV_wme@Exposure, MRMV_wme@Outcome, MRMV_wme@Estimate, MRMV_wme@StdError, MRMV_wme@Pvalue) %>%
@@ -642,18 +979,20 @@ MRMV_wme_df <- cbind(MRMV_wme@Exposure, MRMV_wme@Outcome, MRMV_wme@Estimate, MRM
   magrittr::set_colnames(c("Exposure", "Outcome", "b", "se", "p")) %>%
   mutate(method = "MRMV-WME")
 
-
+## WMBE
 MRMV_wbe_res <- MVMRmode::mv_mrmode(Bout = bmi_ad_mvdat$outcome_beta, 
                     Bexp = bmi_ad_mvdat$exposure_beta, 
                     SEout = bmi_ad_mvdat$outcome_se, 
                     SEexp = bmi_ad_mvdat$exposure_se, 
-                    Psi=0, CIMin = NA, CIMax = NA, CIStep = 0.001, alpha = 0.05, 
-                    residual="IVW",Mode="CM",weighting = "weighted", stderror = "simple", 
-                    phi = 1,distribution = "normal",iterations = 10000)
+                    # Mode="CM", Psi=0, CIMin = NA, CIMax = NA, CIStep = 0.001, alpha = 0.05, 
+                    residual="IVW",
+                    Mode="MBE", weighting = "weighted", stderror = "delta", phi = 1,
+                    distribution = "normal", iterations = 10000
+                    )
 
 MRMV_wbe_df <- as_tibble(MRMV_wbe_res) %>%
-  rename(b = Estimate, p = Pvalue) %>%
-  mutate(Exposure = c("AD", "BMI"), 
+  rename(b = Estimate, p = Pvalue, se = StdError) %>%
+  mutate(Exposure = c("BMI", "AD"), 
          Outcome = "Snoring", 
          method = 'MRMV_WBE') %>%
   mutate_if(is.double, as.character)
@@ -663,11 +1002,13 @@ MRMV_out <-
   bind_rows(
     MRMV_ivw_df, MRMV_egger_df, MRMV_wme_df, MRMV_wbe_df
   ) %>%
-  select(-CILower, -CIUpper, -NvalidSNPs, -Nrange) %>%
+  # select(-CILower, -CIUpper, -NvalidSNPs, -Nrange) %>%
+  select(-CILower, -CIUpper) %>%
   relocate(method, .after = Outcome) %>%
   mutate_at(vars(b, se, p), as.double)
 
 write_csv(MRMV_out, 'results/bmi_ad_snoring_mvmr_sensetivity_results.csv')
+write_csv(MRMV_egger_intercept, 'results/bmi_ad_snoring_mvmr_plei_res.csv')
 
 
 ```

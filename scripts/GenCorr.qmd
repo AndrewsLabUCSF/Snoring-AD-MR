@@ -1,0 +1,263 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Genetic Correlations
+
+```{r}
+#| label: packages
+#| code-fold: true
+#| code-summary: Load R Packages
+#| warning: false
+#| error: false
+#| message: false
+
+library(tidyverse)    # Data wrangling 
+library(GenomicSEM)  
+
+# Define column types for summary statistics
+coltypes = cols(
+  ID = col_character(),
+  CHROM = col_double(),
+  POS = col_double(),
+  REF = col_character(),
+  ALT = col_character(),
+  AF = col_double(),
+  TRAIT = col_character(),
+  BETA = col_double(),
+  SE = col_double(),
+  Z = col_double(),
+  P = col_double(),
+  N = col_double(),
+  OR = col_double(),
+  OR_L95 = col_double(),
+  OR_U95 = col_double(),
+  DIR = col_character(),
+  G1000_ID = col_character(),
+  G1000_VARIANT = col_character(),
+  DBSNP_ID = col_character(),
+  DBSNP_VARIANT = col_character(),
+  OLD_ID = col_character(),
+  OLD_VARIANT = col_character()
+)
+
+```
+
+```{r}
+#| label: Fix SS
+#| code-fold: true
+#| code-summary: Fix GWAS SumStats
+#| warning: false
+#| error: false
+#| message: false
+#| eval: false
+
+bmi_path <- "resources/Locke2015bmi.chrall.CPRA_b37.tsv.gz"
+
+bmi_ss <- read_tsv(bmi_path, comment = "##",  col_types = coltypes, 
+                       col_select = c(DBSNP_ID, CHROM, POS, REF, ALT, AF, BETA, SE, Z, P, N))
+
+
+bmi_ss %>% drop_na %>% write_tsv("data/Locke2015bmi.chrall.CPRA_b37.fixed.tsv.gz")
+
+```
+
+```{r}
+#| label: Munge
+#| code-fold: true
+#| code-summary: Munge GWAS SumStats
+#| warning: false
+#| error: false
+#| message: false
+#| eval: false
+
+## Summary statistics 
+LockeBMI = "data/Locke2015bmi.chrall.CPRA_b37.fixed.tsv.gz"
+CamposSnor = "resources/Campos2020snor.chrall.CPRA_b37.tsv.gz"
+CamposSnorbmiadj ="resources/Campos2020snorbmiadj.chrall.CPRA_b37.tsv.gz"
+KunkleAD = "resources/Kunkle2019load_stage123.chrall.CPRA_b37.tsv.gz"
+BellenguezAD = "resources/Bellenguez2022load.chrall.CPRA_b37.tsv.gz"
+
+## LD Structure 
+ld_path = "resources/eur_w_ld_chr/"
+
+## HAPMAP3 SNPs
+hm3_path = "resources/w_hm3.snplist"
+
+
+GenomicSEM::munge(
+  files = c(LockeBMI, CamposSnor, CamposSnorbmiadj), 
+  # files = c(LockeBMI, CamposSnor, CamposSnorbmiadj, KunkleAD, BellenguezAD), 
+  hm3 = hm3_path, 
+  trait.names = c("LockeBMI", "CamposSnor", "CamposSnorbmiadj"), 
+  # trait.names = c("LockeBMI", "CamposSnor", "CamposSnorbmiadj", "KunkleAD", "BellenguezAD"), 
+  maf.filter = 0.05, 
+  column.names = list(
+    SNP='DBSNP_ID', 
+    MAF='AF', 
+    A1='ALT',
+    A2='REF', 
+    effect='BETA', 
+    N = "N"
+  ), 
+  overwrite=FALSE
+)
+
+```
+
+```{r}
+#| label: Model
+#| code-fold: true
+#| code-summary: Model
+#| warning: false
+#| error: false
+#| message: false
+#| eval: false
+
+model <- '
+  lLockeBMI =~ NA*LockeBMI
+  lCamposSnor =~ NA*CamposSnor
+  lCamposSnorbmiadj =~ NA*CamposSnorbmiadj
+  lBellenguezAD =~ NA*BellenguezAD
+  lKunkleAD =~ NA*KunkleAD
+
+  LockeBMI ~~ 0*LockeBMI + 0*CamposSnor + 0*CamposSnorbmiadj + 0*BellenguezAD + 0*KunkleAD
+  CamposSnor ~~ 0*CamposSnor + 0*CamposSnorbmiadj + 0*BellenguezAD + 0*KunkleAD
+  CamposSnorbmiadj ~~ 0*CamposSnorbmiadj + 0*BellenguezAD + 0*KunkleAD
+  BellenguezAD ~~ 0*BellenguezAD + 0*KunkleAD
+  KunkleAD ~~ 0*KunkleAD
+
+  lLockeBMI ~~ 1*lLockeBMI + lCamposSnor + lCamposSnorbmiadj + lBellenguezAD + lKunkleAD
+  lCamposSnor ~~ 1*lCamposSnor + lCamposSnorbmiadj + lBellenguezAD + lKunkleAD
+  lCamposSnorbmiadj ~~ 1*lCamposSnorbmiadj + lBellenguezAD + lKunkleAD
+  lBellenguezAD ~~ 1*lBellenguezAD + lKunkleAD
+  lKunkleAD ~~ 1*lKunkleAD
+  '
+
+```
+
+
+```{r}
+#| label: LDSC
+#| code-fold: true
+#| code-summary: LDSC
+#| warning: false
+#| error: false
+#| message: false
+#| eval: false
+
+## Estimate genetic covariances 
+ldsc.covstruct <- GenomicSEM::ldsc(
+     traits = c("LockeBMI.sumstats.gz", "CamposSnor.sumstats.gz", "CamposSnorbmiadj.sumstats.gz", "BellenguezAD.sumstats.gz", "KunkleAD.sumstats.gz"),
+     trait.names = c("LockeBMI", "CamposSnor", "CamposSnorbmiadj", "BellenguezAD", "KunkleAD"), 
+     sample.prev = c(NA, 0.36, 0.36, 0.18, 0.37),
+     population.prev = c(NA, 0.36, 0.36, 0.31, 0.31),
+     ld = ld_path, 
+     wld = ld_path,
+     stand = TRUE
+     )
+
+## estimate genetic correlations
+ldsc.cors <-  usermodel(covstruc = ldsc.covstruct,estimation = "DWLS",model = model)
+
+ldsc.res <- ldsc.cors$results %>% 
+  filter(op == "~~") %>%
+  filter(!is.na(p_value)) %>%
+  select(lhs, rhs, STD_Genotype, STD_Genotype_SE, p_value) %>%
+  mutate(model = 'ldsc')
+
+```
+
+
+```{r}
+#| label: HDL
+#| code-fold: true
+#| code-summary: HDL
+#| warning: false
+#| error: false
+#| message: false
+#| eval: false
+
+hdl.covstruct <- GenomicSEM::hdl(
+     traits = c("LockeBMI.sumstats.gz", "CamposSnor.sumstats.gz", "CamposSnorbmiadj.sumstats.gz", "BellenguezAD.sumstats.gz", "KunkleAD.sumstats.gz"),
+     trait.names = c("LockeBMI", "CamposSnor", "CamposSnorbmiadj", "BellenguezAD", "KunkleAD"), 
+     sample.prev = c(NA, 0.36, 0.36, 0.18, 0.37),
+     population.prev = c(NA, 0.36, 0.36, 0.31, 0.31),
+     LD.path="resources/UKB_imputed_hapmap2_SVD_eigen99_extraction/", 
+     method = "piecewise"
+     )
+
+## estimate genetic correlations
+hdl.cors <-  usermodel(covstruc = hdl.covstruct ,estimation = "DWLS",model = model)
+
+hdl.res <- hdl.cors$results %>% 
+  filter(op == "~~") %>%
+  filter(!is.na(p_value)) %>%
+  select(lhs, rhs, STD_Genotype, STD_Genotype_SE, p_value) %>%
+  mutate(model = 'hdl')
+
+```
+
+
+```{r}
+#| label: export
+#| code-fold: true
+#| code-summary: export
+#| warning: false
+#| error: false
+#| message: false
+#| eval: false
+
+write_tsv(hdl.res, 'results/hdl.csv')
+write_tsv(ldl.res, 'results/ldl.csv')
+
+# Specify the current and new directories
+current_directory <- getwd()
+new_directory <- "data/rg/"
+
+# Get a list of all files with a specific suffix in the current directory
+files <- list.files(path = current_directory, pattern = ".sumstats.gz|ldsc.log|munge.log", full.names = TRUE)
+
+# Loop over the files and move each one to the new directory
+for (file in files) {
+  # Extract the file name from the full path
+  file_name <- basename(file)
+  
+  # Construct the new file path
+  new_file_path <- file.path(new_directory, file_name)
+  
+  # Move the file
+  success <- file.rename(from = file, to = new_file_path)
+  
+  # Check if the operation was successful
+  if (!success) {
+    warning(paste("Failed to move the file:", file))
+  }
+}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

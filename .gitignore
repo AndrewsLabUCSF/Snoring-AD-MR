@@ -42,3 +42,5 @@ vignettes/*.pdf
 resources/*chrall.CPRA_b37.tsv.gz
 
 .DS_Store
+*.sumstats.gz
+*.tsv.gz

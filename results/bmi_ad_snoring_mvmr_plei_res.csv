@@ -1,0 +1,2 @@
+Exposure,Outcome,b,se,p,method
+AD | BMI,Snoring,0.00103790635548391,0.000481914708827088,0.0312626237889942,MRMV-Egger_intecept

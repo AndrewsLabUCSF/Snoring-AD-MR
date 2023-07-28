@@ -1,0 +1,91 @@
+---
+title: "docs"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(tidyverse)
+```
+
+## Main Tables
+```{r}
+## Table 2 - Univerable MR
+### fwd
+mr_res <- read_csv('results/sleep_ad_mr_results.csv') %>% 
+  filter(exposure == "Snoring", outcome == "AD") %>%
+  select(-id.exposure, -id.outcome) %>%
+  generate_odds_ratios()
+het_res <- read_csv('results/sleep_ad_het_results.csv') %>% 
+  filter(exposure == "Snoring", outcome == "AD") %>%
+  select(-id.exposure, -id.outcome)
+plei_res <- read_csv('results/sleep_ad_plei_results.csv') %>% 
+  filter(exposure == "Snoring", outcome == "AD") %>%
+  select(-id.exposure, -id.outcome)
+f_res <- read_csv('results/sleep_ad_f_results.csv') %>% 
+  filter(exposure == "Snoring", outcome == "AD") %>%
+  relocate(outcome)
+
+
+### rev
+mr_res_rev <- read_csv('results/ad_bmi_sleep_mr_results.csv') %>% 
+  filter(exposure %in% c("AD", "BMI"), outcome == "Snoring") %>%
+  select(-id.exposure, -id.outcome) %>%
+  generate_odds_ratios()
+het_res_rev <- read_csv('results/ad_bmi_sleep_het_results.csv') %>% 
+  filter(exposure %in% c("AD", "BMI"), outcome == "Snoring") %>%
+  select(-id.exposure, -id.outcome)
+plei_res_rev <- read_csv('results/ad_bmi_sleep_plei_results.csv') %>% 
+  filter(exposure %in% c("AD", "BMI"), outcome == "Snoring") %>%
+  select(-id.exposure, -id.outcome)
+f_res_rev <- read_csv('results/ad_bmi_f_results.csv') %>% 
+  filter(exposure %in% c("AD", "BMI"), outcome == "Snoring") %>%
+  relocate(outcome)
+
+
+file.remove("docs/Table2.csv")
+list(mr_res, het_res, plei_res, f_res, mr_res_rev, het_res_rev, plei_res_rev, f_res_rev) %>%
+  map(write_csv, file = "docs/Table2.csv", append = TRUE, col_names = T)
+
+
+```
+
+## Main Tables
+```{r}
+## Table 3 - MVMR
+mvmr_res <- read_csv('results/bmi_ad_snoring_mvmr_results.csv') %>%
+  select(-id.exposure, -id.outcome) %>%
+  mutate(method = 'MRMV-IVW') %>%
+  relocate(method, .after = 'outcome') %>%
+  rename(Exposure = exposure, Outcome = outcome, p = pval)
+mvmr_sens_res <- read_csv('results/bmi_ad_snoring_mvmr_sensetivity_results.csv')
+mvmr_f_res <- read_csv('results/bmi_ad_snoring_sres.csv')
+mvmr_het_res <- read_csv('results/bmi_ad_snoring_q_res.csv')
+mvmr_plei_res <- read_csv('results/bmi_ad_snoring_mvmr_plei_res.csv')
+
+file.remove("docs/Table3.csv")
+list(bind_rows(mvmr_res, mvmr_sens_res), mvmr_f_res, mvmr_het_res, mvmr_plei_res) %>%
+  map(write_csv, file = "docs/Table3.csv", append = TRUE, col_names = T)
+
+```
+
+
+
+## Supplementary Tables
+
+```{r}
+## Harmonized Datasets - ST3
+mrdat <- read_csv('data/snoring_ad_harmonized_data.csv')
+mrdat_rev <- read_csv('data/ad_bmi_snoring_harmonized_data.csv')
+
+st3 <- bind_rows(
+  mrdat %>% filter(exposure == "Snoring", outcome == "AD"),
+  mrdat_rev %>% filter(exposure %in% c("AD", "BMI"), outcome == "Snoring")
+)
+
+write_csv(st3, "docs/SupplementaryTable3.csv")
+
+```
+

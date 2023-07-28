@@ -386,7 +386,7 @@ write_csv(mrdat, 'data/snoring_ad_harmonized_data.csv')
 mr_res <- mr(mrdat, method_list = c("mr_ivw_fe", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode"))
 
 mr_res
-
+generate_odds_ratios(mr_res) %>% group_split(exposure, outcome)
 ```
 
 
@@ -410,6 +410,42 @@ radial_res_snoring.AD <- ivw_radial(radial_dat$Snoring.AD, alpha = 0.05/nrow(rad
 radial_res_SAsnoring.AD <- ivw_radial(radial_dat$SAsnoring.AD, alpha = 0.05/nrow(radial_dat$SAsnoring.AD)) 
 radial_res_snorbmiadj.AD <- ivw_radial(radial_dat$SnoringBMIadj.AD, alpha = 0.05/nrow(radial_dat$SnoringBMIadj.AD)) 
 
+
+# Fstat
+
+## F statistic. Burgess et al 2011
+f_stat = function(N, K, R){
+  f = ((N-K-1) / K) * (R/(1-R))
+  f
+  }
+
+## Proportion of phenotypic variance explained by SNP 
+## https://doi.org/10.1371/journal.pone.0120758.s001
+snp.pve <- function(eaf, beta, se, n){
+  (2*eaf*(1 - eaf)*beta^2) / (2 * beta * eaf * (1-eaf) + se^2 * 2 * n * eaf * (1-eaf))
+}
+
+f_res <- mrdat %>%
+  group_by(exposure, outcome) %>%
+  filter(mr_keep == TRUE) %>%
+  select(SNP, exposure, outcome, effect_allele.exposure, eaf.exposure, beta.exposure, se.exposure) %>%
+  mutate(
+    samplesize.exposure = case_when(
+      exposure == "Snoring" ~ 408317, 
+      exposure == "SAsnoring" ~ 1477352, 
+      exposure == "SnoringBMIadj" ~ 408317, 
+     ), 
+    pve = snp.pve(eaf.exposure, beta.exposure, se.exposure, samplesize.exposure), 
+    f = f_stat(samplesize.exposure, 1, pve),
+    # f = abs(beta.exposure)^2 / se.exposure^2
+  ) %>% 
+  summarise(
+    pve = sum(pve, na.rm = T), 
+    k = n(), 
+    samplesize = max(samplesize.exposure), 
+    f = mean(f, na.rm = T),
+  ) 
+
 # Phenoscanner 
 phewas_dat <- phenoscanner(snpquery=radial_res$outliers$SNP) 
 ```
@@ -418,6 +454,7 @@ phewas_dat <- phenoscanner(snpquery=radial_res$outliers$SNP)
 write_csv(mr_res, 'results/sleep_ad_mr_results.csv')
 write_csv(het_res, 'results/sleep_ad_het_results.csv')
 write_csv(plei_res, 'results/sleep_ad_plei_results.csv')
+write_csv(f_res, 'results/sleep_ad_f_results.csv')
 ```
 
 ## Plots 
@@ -461,6 +498,131 @@ ggsave('results/plots/mr_radial_SAsnoring.png', plot = radial_SAsnoring.AD_p, un
 
 ```
 
+```{r}
+## Scatter plot
+snoring_ad_mr_p <- mr_scatter_plot(
+  filter(mr_res, exposure == "Snoring", outcome == "AD", method != "Inverse variance weighted"), 
+  filter(mrdat, exposure == "Snoring", outcome == "AD")
+)
+
+snoring_ad_mr_p_out <- snoring_ad_mr_p[[1]] + 
+  labs(tag = "A") + 
+  theme_bw() + 
+  scale_color_brewer(
+    palette = "Set1", 
+    labels = c("IVW", "MR-Egger", "WME", "WMBE")) + 
+  guides(color = guide_legend(ncol = 1)) + 
+  theme(
+    legend.position = 'right', 
+    text = element_text(size = 8),
+    plot.tag = element_text(face = "bold")
+    )
+
+## Radial plot
+snoring_ad_radial_p_out <- radial_snoring.AD_p + 
+  labs(tag = "C") + 
+  theme_bw() + 
+  theme(
+    legend.position = 'none', 
+    text = element_text(size = 8), 
+    aspect.ratio=3/5,
+    plot.tag = element_text(face = "bold"),
+    plot.title = element_blank()
+    ) 
+
+## Funnel plot 
+
+snoring_ad_res_single_p <- mr_funnel_plot(
+  filter(res_single, exposure == "Snoring", outcome == "AD") 
+)
+
+snoring_ad_fun_p_out <- snoring_ad_res_single_p[[1]] + 
+  labs(tag = "B") + 
+  theme_bw() + 
+  scale_color_brewer(
+    palette = "Set1", 
+    labels = c("IVW", "MR-Egger", "WME", "WMBE")) + 
+  theme(
+    legend.position = 'bottom',
+    text = element_text(size = 8),
+    plot.tag = element_text(face = "bold"), 
+    )
+
+## Legend
+snoring_legend_scatter <- get_legend(
+  # create some space to the left of the legend
+  snoring_ad_mr_p_out + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+## Cofficent plot 
+coff_mrdat <- filter(mr_res, exposure == "Snoring", outcome == "AD", method != "Inverse variance weighted") %>% 
+  generate_odds_ratios() %>% 
+  mutate(
+   method = fct_recode(method, "MR-Egger" = "MR Egger", "WME" = "Weighted median", "WMBE" = "Weighted mode", 
+                       "IVW" = "Inverse variance weighted (fixed effects)"), 
+   method = fct_relevel(method,  "WMBE","WME", "MR-Egger","IVW"), 
+   exceeds_limit = ifelse(or_uci95 > 30, TRUE, FALSE)
+  ) 
+
+snoring_ad_coef_p <- ggplot(coff_mrdat, aes(x = or, y = method, color = method)) + 
+    geom_vline(xintercept = 1, linetype = 2) + 
+    geom_point() + 
+    geom_errorbar(aes(xmin = or_lci95, xmax = ifelse(exceeds_limit, 30, or_uci95)), width = 0) + 
+  geom_segment(data = filter(coff_mrdat, exceeds_limit), 
+               aes(x = 29.9, xend = 30, y = method, yend = method, color = method), 
+               arrow = arrow(length = unit(0.02, "npc")), 
+               inherit.aes = FALSE) +
+    scale_color_manual(values = c("#984EA3", "#4DAF4A", "#377EB8", "#E41A1C")) + 
+    scale_x_log10() + 
+    labs(tag = "D", x = "OR") + 
+    theme_bw() + 
+    theme(
+        legend.position = 'bottom',
+        text = element_text(size = 8),
+        plot.tag = element_text(face = "bold"), 
+        axis.title.y = element_blank()
+    ) 
+  
+
+png("docs/snoring_ad_mr.png", width = 7.5, height = 4, units = "in", res = 300)
+pageCreate(width = 7.5, height = 4, default.units = "inches")
+
+plotGG(
+  plot = snoring_ad_mr_p_out + theme(legend.position = 'none'),
+  x = 0, y = 0,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = snoring_ad_fun_p_out  + theme(legend.position = 'none'),
+  x = 3, y = 0,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = snoring_legend_scatter,
+  x = 6.1, y = 0,
+  width = 0.5, height = 2, just = c("left", "top")
+)
+
+
+plotGG(
+  plot = snoring_ad_radial_p_out,
+  x = 0, y = 2,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+plotGG(
+  plot = snoring_ad_coef_p + theme(legend.position = 'none'),
+  x = 3, y = 2,
+  width = 3, height = 2, just = c("left", "top")
+)
+
+
+pageGuideHide()
+dev.off()
+```
+
 ## Re-run analysis excluding outliers 
 ```{r outliers}
 
@@ -482,7 +644,7 @@ mr_dat_outlier <- mr_dat %>%
 mr_res_outlier <- mr(mr_dat_outlier, method_list = c("mr_ivw_fe", "mr_egger_regression", "mr_weighted_median", "mr_weighted_mode"))
 
 # Heterogeneity statistics 
- mr_heterogeneity(mr_dat_outlier, method_list = c("mr_egger_regression", "mr_ivw"))
+mr_heterogeneity(mr_dat_outlier, method_list = c("mr_egger_regression", "mr_ivw"))
 
 # Horizontal pleitropy
 mr_pleiotropy_test(mr_dat_outlier)

@@ -1,0 +1,35 @@
+Munging 2 summary statistics files: Snoring_Dementia, started at 2023-06-09 19:59:36
+     
+Interpreting the SNP column in Snoring as the SNP column.
+Interpreting the BETA column as the effect column in Snoring.
+Interpreting the SE column as the SE column in Snoring.
+Interpreting the Z column in Snoring as the standardised effect column.
+Interpreting the P column in Snoring as the P-value column.
+Interpreting the ALT column in Snoring as the effect allele column.
+Interpreting the REF column in Snoring as the alternate allele column.
+Interpreting the N column as the sample size column in Snoring.
+Interpreting the CHROM column in Snoring as the chromosome column.
+Interpreting the POS column as the base pair/position column in Snoring.
+Interpreting the SNP column in Dementia as the SNP column.
+Interpreting the BETA column as the effect column in Dementia.
+Interpreting the SE column as the SE column in Dementia.
+Interpreting the Z column in Dementia as the standardised effect column.
+Interpreting the P column in Dementia as the P-value column.
+Interpreting the ALT column in Dementia as the effect allele column.
+Interpreting the REF column in Dementia as the alternate allele column.
+Interpreting the N column as the sample size column in Dementia.
+Interpreting the CHROM column in Dementia as the chromosome column.
+Interpreting the POS column as the base pair/position column in Dementia.
+Munging LD score files, started at 2023-06-09 19:59:39
+     
+Interpreting the RS column in LDfile as the SNP column.
+Interpreting the CHR column as the chromosome column in LDfile.
+Interpreting the POS column as the base pair/position column in LDfile.
+Interpreting the LDSC column as the LD score column in LDfile.
+Interpreting the WEIGHT column as the weight column in LDfile.
+Interpreting the RSID column as the SNP column in rhofile.
+Interpreting the CHR column as the chromosome column in rhofile.
+Interpreting the POS column as the base pair/position column in rhofile.
+Interpreting the piK column as the proportion of effective SNPs in the local-LD distribution column in rhofile.
+Interpreting the sigK column as the variance of the local-LD distribution column in rhofile.
+Interpreting the m_local column as the number of SNPs used to calculate the local-LD distribution column in rhofile.
