@@ -42,3 +42,8 @@ Genetic instruments were obtained by selecting independent genome-wide significa
 
 **Evaluate if the causal effect of Alzheimer's disease on snoring is mediated by BMI**
 The study employed a multivariable Mendelian randomization (MR) approach to investigate the causal relationship between body mass index (BMI) and Alzheimer's disease (AD) and their potential mediation by snoring. Independent genome-wide significant SNPs (p-value < 5e-8, linkage disequilibrium (LD) r2 = 0.001, window = 10Mb) for BMI and AD were extracted from their respective GWAS studies, and from each other to generate a combined list of SNPs. Proxy-variants (r2 > 0.8, EUR) were used in place of SNPs not available in the GWAS. The combined list of SNPs was then clumped to retain only independent genome-wide significant SNPs (p-value < 5e-8, LD r2 = 0.001, window = 10Mb) across both exposures. These SNPs were then extracted from the outcome variable, snoring. Multivariable MR extensions, including IVW, MR-Egger, Weighted mode, Weighted median, and radial MR, were subsequently used to evaluate the causal effect of AD on snoring, mediated by BMI.
+
+---
+
+## Citation 
+Gao Y, Andrews S, Daghlas I, Brenowitz WD, Raji CA, Yaffe K, Leng Y. Snoring and risk of dementia: a prospective cohort and Mendelian randomization study. Sleep. 2024 Jun 29:zsae149. doi: 10.1093/sleep/zsae149. Epub ahead of print. PMID: 38943476.
